@@ -15,6 +15,7 @@ serviceAccount:
   create: false
   annotations: {}
   name: ""
+  automountServiceAccountToken: false
 
 podAnnotations: {}
 
