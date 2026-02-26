@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Clear Storage</title>
+    <style>
+        body {
+            font-family: system-ui;
+            padding: 40px;
+            text-align: center;
+        }
+        .btn {
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #dc2626;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            margin: 10px;
+        }
+        .btn:hover {
+            background: #b91c1c;
+        }
+        .success {
+            color: #16a34a;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Clear Table Planner Storage</h1>
+    <p>Click the button below to clear all stored data and start fresh.</p>
+    <button class="btn" onclick="clearStorage()">Clear Storage</button>
+    <div id="message"></div>
+
+    <script>
+        function clearStorage() {
+            localStorage.removeItem('tablePlanner_guests');
+            localStorage.removeItem('tablePlanner_tables');
+            document.getElementById('message').innerHTML = '<p class="success">✓ Storage cleared! You can now close this page and return to the app.</p>';
+        }
+    </script>
+</body>
+</html>

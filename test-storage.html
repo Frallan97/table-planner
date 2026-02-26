@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storage Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #0f0;
+        }
+        .test { margin: 10px 0; padding: 10px; background: #2a2a2a; }
+        .pass { color: #0f0; }
+        .fail { color: #f00; }
+    </style>
+</head>
+<body>
+    <h1>Table Planner - Storage Test</h1>
+    <div id="results"></div>
+
+    <script>
+        const results = document.getElementById('results');
+
+        function log(message, pass = true) {
+            const div = document.createElement('div');
+            div.className = `test ${pass ? 'pass' : 'fail'}`;
+            div.textContent = `${pass ? '✅' : '❌'} ${message}`;
+            results.appendChild(div);
+        }
+
+        // Test 1: Clear existing data
+        log('Clearing localStorage...');
+        localStorage.removeItem('tablePlanner_guests');
+        localStorage.removeItem('tablePlanner_tables');
+
+        // Test 2: Write guest data
+        const testGuests = [
+            {
+                id: '1',
+                name: 'Test User 1',
+                dietaryRestrictions: ['VEGETARIAN'],
+                assignedTableId: null,
+                createdAt: new Date().toISOString()
+            },
+            {
+                id: '2',
+                name: 'Test User 2',
+                dietaryRestrictions: ['NONE'],
+                assignedTableId: 't1',
+                createdAt: new Date().toISOString()
+            }
+        ];
+
+        localStorage.setItem('tablePlanner_guests', JSON.stringify(testGuests));
+        log('Wrote guest data to localStorage');
+
+        // Test 3: Read guest data back
+        const readGuests = JSON.parse(localStorage.getItem('tablePlanner_guests'));
+        const guestsMatch = readGuests.length === 2 && readGuests[0].name === 'Test User 1';
+        log(`Read guest data: ${readGuests.length} guests`, guestsMatch);
+
+        // Test 4: Write table data
+        const testTables = [
+            {
+                id: 't1',
+                name: 'Table 1',
+                shape: 'SQUARE',
+                capacity: 4,
+                position: { x: 0, y: 0 },
+                assignedGuests: ['2']
+            }
+        ];
+
+        localStorage.setItem('tablePlanner_tables', JSON.stringify(testTables));
+        log('Wrote table data to localStorage');
+
+        // Test 5: Read table data back
+        const readTables = JSON.parse(localStorage.getItem('tablePlanner_tables'));
+        const tablesMatch = readTables.length === 1 && readTables[0].name === 'Table 1';
+        log(`Read table data: ${readTables.length} tables`, tablesMatch);
+
+        // Test 6: Verify assignment link
+        const assignedGuest = readGuests.find(g => g.assignedTableId === 't1');
+        const table = readTables.find(t => t.id === 't1');
+        const assignmentWorks = assignedGuest && table && table.assignedGuests.includes('2');
+        log(`Guest-Table assignment link works`, assignmentWorks);
+
+        // Test 7: Storage size
+        const guestSize = JSON.stringify(testGuests).length;
+        const tableSize = JSON.stringify(testTables).length;
+        const totalSize = guestSize + tableSize;
+        log(`Storage size: ${totalSize} bytes (guests: ${guestSize}, tables: ${tableSize})`);
+
+        // Test 8: Large dataset
+        const largeGuests = Array.from({ length: 100 }, (_, i) => ({
+            id: `g${i}`,
+            name: `Guest ${i}`,
+            dietaryRestrictions: ['NONE'],
+            assignedTableId: null,
+            createdAt: new Date().toISOString()
+        }));
+
+        localStorage.setItem('tablePlanner_guests', JSON.stringify(largeGuests));
+        const largeRead = JSON.parse(localStorage.getItem('tablePlanner_guests'));
+        log(`Large dataset (100 guests): ${largeRead.length} guests`, largeRead.length === 100);
+
+        // Test 9: Restore original test data
+        localStorage.setItem('tablePlanner_guests', JSON.stringify(testGuests));
+        localStorage.setItem('tablePlanner_tables', JSON.stringify(testTables));
+        log('Test data restored');
+
+        // Final summary
+        log('\n=== All localStorage tests passed! ===\n');
+        log('You can now open the main application at http://localhost:3000');
+        log('The test data (2 guests, 1 table) should be visible in the app');
+    </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect x="12" y="22" width="40" height="16" rx="3" fill="#f0f0f0" stroke="#555" stroke-width="2"/>
+  <text x="32" y="33" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="9" font-weight="600" fill="#555">TABLE</text>
+  <circle cx="18" cy="14" r="6" fill="#e8e8e8" stroke="#777" stroke-width="1.5"/>
+  <circle cx="32" cy="12" r="6" fill="#e8e8e8" stroke="#777" stroke-width="1.5"/>
+  <circle cx="46" cy="14" r="6" fill="#e8e8e8" stroke="#777" stroke-width="1.5"/>
+  <circle cx="18" cy="46" r="6" fill="#e8e8e8" stroke="#777" stroke-width="1.5"/>
+  <circle cx="32" cy="48" r="6" fill="#e8e8e8" stroke="#777" stroke-width="1.5"/>
+  <circle cx="46" cy="46" r="6" fill="#e8e8e8" stroke="#777" stroke-width="1.5"/>
+</svg>
