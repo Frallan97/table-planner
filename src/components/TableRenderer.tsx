@@ -42,6 +42,7 @@ interface Props {
   selectedSeat: { tableId: string; position: number } | null;
   onSeatClick: (tableId: string, position: number) => void;
   isSelected: boolean;
+  seatColorOverride?: Map<string, string>;
 }
 
 export function TableRenderer({
@@ -50,14 +51,15 @@ export function TableRenderer({
   selectedSeat,
   onSeatClick,
   isSelected,
+  seatColorOverride,
 }: Props) {
   switch (table.tableType) {
     case "LINE":
-      return <LineTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected }} />;
+      return <LineTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride }} />;
     case "U_SHAPE":
-      return <UShapeTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected }} />;
+      return <UShapeTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride }} />;
     case "ROUND":
-      return <RoundTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected }} />;
+      return <RoundTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride }} />;
     default:
       return null;
   }
@@ -65,7 +67,7 @@ export function TableRenderer({
 
 // ─── LINE TABLE ──────────────────────────────────────────────────────
 
-function LineTable({ table, guestMap, selectedSeat, onSeatClick, isSelected }: Props) {
+function LineTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride }: Props) {
   const endLeft = table.endSeatLeft ?? false;
   const endRight = table.endSeatRight ?? false;
   const endCount = (endLeft ? 1 : 0) + (endRight ? 1 : 0);
@@ -169,14 +171,14 @@ function LineTable({ table, guestMap, selectedSeat, onSeatClick, isSelected }: P
       >
         {table.name}
       </text>
-      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick)}
+      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride)}
     </>
   );
 }
 
 // ─── U-SHAPE TABLE ───────────────────────────────────────────────────
 
-function UShapeTable({ table, guestMap, selectedSeat, onSeatClick, isSelected }: Props) {
+function UShapeTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride }: Props) {
   const { topSeats: nTop, leftSeats: nLeft, rightSeats: nRight } = table;
 
   const layout = useMemo(() => {
@@ -306,14 +308,14 @@ function UShapeTable({ table, guestMap, selectedSeat, onSeatClick, isSelected }:
         </text>
       </g>
 
-      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick)}
+      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride)}
     </>
   );
 }
 
 // ─── ROUND TABLE ─────────────────────────────────────────────────────
 
-function RoundTable({ table, guestMap, selectedSeat, onSeatClick, isSelected }: Props) {
+function RoundTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride }: Props) {
   const n = table.seats.length;
   const R = Math.max(35, n * 7);
 
@@ -350,7 +352,7 @@ function RoundTable({ table, guestMap, selectedSeat, onSeatClick, isSelected }: 
       <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fill="#555" fontSize="13" fontWeight="500">
         {table.name}
       </text>
-      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick)}
+      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride)}
     </>
   );
 }
@@ -362,13 +364,20 @@ function renderSeats(
   table: Table,
   guestMap: Map<string, Guest>,
   selectedSeat: { tableId: string; position: number } | null,
-  onSeatClick: (tableId: string, position: number) => void
+  onSeatClick: (tableId: string, position: number) => void,
+  seatColorOverride?: Map<string, string>
 ) {
   return seats.map((s) => {
     const guest = s.guestId ? guestMap.get(s.guestId) : null;
     const isSel =
       selectedSeat?.tableId === table.id && selectedSeat.position === s.idx;
     const seatNum = s.idx + 1;
+    const overrideColor = guest && seatColorOverride?.get(guest.id);
+    const fillColor = overrideColor ?? (guest ? gColor(guest.id) : "white");
+    const strokeColor = overrideColor
+      ? overrideColor
+      : isSel ? "#3b82f6" : "#999";
+    const strokeW = overrideColor ? 3 : isSel ? 2.5 : 1.5;
 
     return (
       <g
@@ -384,9 +393,9 @@ function renderSeats(
           cx={s.cx}
           cy={s.cy}
           r={SEAT_R}
-          fill={guest ? gColor(guest.id) : "white"}
-          stroke={isSel ? "#3b82f6" : "#999"}
-          strokeWidth={isSel ? 2.5 : 1.5}
+          fill={fillColor}
+          stroke={strokeColor}
+          strokeWidth={strokeW}
         />
         <text
           x={s.cx}

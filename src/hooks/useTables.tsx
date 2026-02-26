@@ -1,3 +1,4 @@
+import { useMemo, useCallback } from "react";
 import { useLocalStorage } from "./useLocalStorage";
 import {
   Table,
@@ -21,13 +22,17 @@ export function useTables() {
     []
   );
 
-  const tables = storedTables.filter(
-    (t) => t.tableType !== undefined
+  const tables = useMemo(
+    () => storedTables.filter((t) => t.tableType !== undefined),
+    [storedTables]
   );
 
-  const setTables = (value: Table[] | ((prev: Table[]) => Table[])) => {
-    setStoredTables(value);
-  };
+  const setTables = useCallback(
+    (value: Table[] | ((prev: Table[]) => Table[])) => {
+      setStoredTables(value);
+    },
+    [setStoredTables]
+  );
 
   const nextName = (_type: TableType) => {
     const existing = tables.length;

@@ -9,13 +9,16 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { PlannerProvider } from "./hooks/PlannerContext";
+import { AuthProvider } from "./hooks/useAuth";
 
 const elem = document.getElementById("root")!;
 const app = (
   <StrictMode>
-    <PlannerProvider>
-      <App />
-    </PlannerProvider>
+    <AuthProvider>
+      <PlannerProvider>
+        <App />
+      </PlannerProvider>
+    </AuthProvider>
   </StrictMode>
 );
 

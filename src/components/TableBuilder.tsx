@@ -1,3 +1,4 @@
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -809,6 +810,68 @@ function AlignButtons({
   tables: { id: string; position: { x: number; y: number } }[];
   onUpdate: (id: string, pos: { x: number; y: number }) => void;
 }) {
+  const meanDistance = useMemo(() => {
+    if (selected.length < 2) return 120;
+    const sorted = [...selected].sort((a, b) => {
+      const dx = a.position.x - b.position.x;
+      const dy = a.position.y - b.position.y;
+      return dx !== 0 ? dx : dy;
+    });
+    let totalDist = 0;
+    for (let i = 1; i < sorted.length; i++) {
+      const dx = sorted[i].position.x - sorted[i - 1].position.x;
+      const dy = sorted[i].position.y - sorted[i - 1].position.y;
+      totalDist += Math.sqrt(dx * dx + dy * dy);
+    }
+    return Math.round(totalDist / (sorted.length - 1));
+  }, [selected]);
+
+  const [distance, setDistance] = useState(meanDistance);
+  const [activeAxis, setActiveAxis] = useState<"h" | "v" | null>(null);
+  const anchorRef = useRef<{ ids: string[]; positions: { x: number; y: number }[] } | null>(null);
+
+  useEffect(() => {
+    if (!activeAxis) {
+      setDistance(meanDistance);
+    }
+  }, [meanDistance, activeAxis]);
+
+  const applyDistribute = (axis: "h" | "v", dist: number) => {
+    if (!anchorRef.current) return;
+    const { ids, positions } = anchorRef.current;
+    for (let i = 0; i < ids.length; i++) {
+      if (axis === "h") {
+        onUpdate(ids[i], { x: Math.round(positions[0].x + i * dist), y: positions[i].y });
+      } else {
+        onUpdate(ids[i], { x: positions[i].x, y: Math.round(positions[0].y + i * dist) });
+      }
+    }
+  };
+
+  const handleDistanceChange = (v: number) => {
+    setDistance(v);
+    if (activeAxis && anchorRef.current) {
+      applyDistribute(activeAxis, v);
+    }
+  };
+
+  const activateAxis = (axis: "h" | "v") => {
+    if (activeAxis === axis) {
+      setActiveAxis(null);
+      anchorRef.current = null;
+      return;
+    }
+    const sorted = [...selected].sort((a, b) =>
+      axis === "h" ? a.position.x - b.position.x : a.position.y - b.position.y
+    );
+    anchorRef.current = {
+      ids: sorted.map((t) => t.id),
+      positions: sorted.map((t) => ({ ...t.position })),
+    };
+    setActiveAxis(axis);
+    applyDistribute(axis, distance);
+  };
+
   if (selected.length < 2) return null;
   const xs = selected.map((t) => t.position.x);
   const ys = selected.map((t) => t.position.y);
@@ -852,26 +915,9 @@ function AlignButtons({
     },
   ];
 
-  const distributeActions: { icon: React.ReactNode; title: string; fn: () => void }[] = [
-    {
-      icon: <AlignHorizontalSpaceAround className="w-3.5 h-3.5" />,
-      title: "Equal distance horizontally",
-      fn: () => {
-        const sorted = [...selected].sort((a, b) => a.position.x - b.position.x);
-        const step = sorted.length > 1 ? (maxX - minX) / (sorted.length - 1) : 0;
-        sorted.forEach((t, i) => onUpdate(t.id, { x: Math.round(minX + i * step), y: t.position.y }));
-      },
-    },
-    {
-      icon: <AlignVerticalSpaceAround className="w-3.5 h-3.5" />,
-      title: "Equal distance vertically",
-      fn: () => {
-        const sorted = [...selected].sort((a, b) => a.position.y - b.position.y);
-        const step = sorted.length > 1 ? (maxY - minY) / (sorted.length - 1) : 0;
-        sorted.forEach((t, i) => onUpdate(t.id, { x: t.position.x, y: Math.round(minY + i * step) }));
-      },
-    },
-  ];
+  const btnBase = "h-7 flex items-center justify-center gap-1.5 rounded border transition-colors text-[10px]";
+  const btnIdle = "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground";
+  const btnActive = "bg-primary/10 border-primary/40 text-primary font-medium";
 
   return (
     <div className="space-y-2">
@@ -892,19 +938,25 @@ function AlignButtons({
       </div>
       <div>
         <Label className="text-xs text-muted-foreground mb-1.5 block">Equal distance</Label>
-        <div className="grid grid-cols-2 gap-1">
-          {distributeActions.map((a, i) => (
-            <button
-              key={i}
-              title={a.title}
-              onClick={a.fn}
-              className="h-7 flex items-center justify-center gap-1.5 rounded border bg-muted/50 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground text-[10px]"
-            >
-              {a.icon}
-              <span>{i === 0 ? "Horizontal" : "Vertical"}</span>
-            </button>
-          ))}
+        <div className="grid grid-cols-2 gap-1 mb-1.5">
+          <button
+            title="Equal distance horizontally"
+            onClick={() => activateAxis("h")}
+            className={`${btnBase} ${activeAxis === "h" ? btnActive : btnIdle}`}
+          >
+            <AlignHorizontalSpaceAround className="w-3.5 h-3.5" />
+            <span>Horizontal</span>
+          </button>
+          <button
+            title="Equal distance vertically"
+            onClick={() => activateAxis("v")}
+            className={`${btnBase} ${activeAxis === "v" ? btnActive : btnIdle}`}
+          >
+            <AlignVerticalSpaceAround className="w-3.5 h-3.5" />
+            <span>Vertical</span>
+          </button>
         </div>
+        <StepperInput value={distance} min={20} max={500} step={10} onChange={handleDistanceChange} />
       </div>
     </div>
   );

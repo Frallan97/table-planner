@@ -1,3 +1,4 @@
+# -- Frontend (nginx serving static files + API proxy)
 replicaCount: 2
 
 image:
@@ -62,15 +63,9 @@ resources:
 
 autoscaling:
   enabled: false
-  minReplicas: 2
-  maxReplicas: 5
-  targetCPUUtilizationPercentage: 80
-  targetMemoryUtilizationPercentage: 80
 
 nodeSelector: {}
-
 tolerations: []
-
 affinity: {}
 
 livenessProbe:
@@ -90,3 +85,57 @@ readinessProbe:
   periodSeconds: 10
   timeoutSeconds: 3
   failureThreshold: 3
+
+# -- Backend (Go API)
+backend:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: ghcr.io/frallan97/table-planner-backend
+    pullPolicy: Always
+    tag: "latest"
+
+  service:
+    port: 8082
+
+  resources:
+    limits:
+      cpu: 300m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+  env:
+    authServiceURL: "https://auth.vibeoholic.com"
+    allowedOrigins: "https://table.vibeoholic.com"
+
+# -- PostgreSQL
+postgresql:
+  enabled: true
+
+  image:
+    repository: postgres
+    tag: "15-alpine"
+
+  auth:
+    database: tableplanner
+    username: tableplanner
+    # password is set via existing secret
+    existingSecret: table-planner-db-secret
+    secretKeys:
+      password: password
+
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

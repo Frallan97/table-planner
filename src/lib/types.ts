@@ -12,6 +12,7 @@ export interface Guest {
   dietaryRestrictions: DietaryRestriction[];
   assignedTableId: string | null;
   seatPosition: number | null;
+  guestOf: string | null;
   createdAt: Date;
 }
 

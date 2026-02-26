@@ -1,23 +1,25 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { usePlannerGuests as useGuests, usePlannerTables as useTables, usePlannerLabels as useLabels } from "@/hooks/PlannerContext";
 import { DietaryRestriction, DIETARY_RESTRICTION_LABELS } from "@/lib/types";
 import type { Table, Guest, FloorLabel } from "@/lib/types";
 import { Label } from "@/components/ui/label";
-import { Printer, LayoutList, Users, CreditCard, MapPin, ShieldAlert, BookA } from "lucide-react";
+import { Printer, MapPin, ShieldAlert, BookA } from "lucide-react";
+import { TableRenderer } from "./TableRenderer";
 
-type Format = "seating-chart" | "guest-list" | "table-cards" | "floor-plan" | "allergy-map" | "alpha-lookup";
+type Format = "floor-plan" | "allergy-map" | "alpha-lookup";
 
 export function PrintView() {
   const { guests } = useGuests();
   const { tables } = useTables();
   const { labels } = useLabels();
-  const [format, setFormat] = useState<Format>("seating-chart");
+  const [format, setFormat] = useState<Format>("floor-plan");
   const printRef = useRef<HTMLDivElement>(null);
 
   const [lookupFontSize, setLookupFontSize] = useState(12);
   const [lookupColumns, setLookupColumns] = useState(1);
+  const [floorPlanPages, setFloorPlanPages] = useState<1 | 2 | 4>(1);
 
   const handlePrint = () => {
     const el = printRef.current;
@@ -28,8 +30,9 @@ export function PrintView() {
       <title>Table Planner — Print</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; color: #111; }
-        @media print { body { padding: 12px; } }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 0; color: #111; }
+        @page { margin: 0; }
+        @media print { body { padding: 0; } }
       </style>
     </head><body>${el.innerHTML}</body></html>`);
     win.document.close();
@@ -42,9 +45,6 @@ export function PrintView() {
   const assignedGuests = guests.filter((g) => g.assignedTableId !== null);
 
   const formats: { id: Format; label: string; icon: React.ReactNode }[] = [
-    { id: "seating-chart", label: "Seating Chart", icon: <LayoutList className="w-4 h-4" /> },
-    { id: "guest-list", label: "Guest List", icon: <Users className="w-4 h-4" /> },
-    { id: "table-cards", label: "Place Cards", icon: <CreditCard className="w-4 h-4" /> },
     { id: "floor-plan", label: "Floor Plan", icon: <MapPin className="w-4 h-4" /> },
     { id: "allergy-map", label: "Allergy Map", icon: <ShieldAlert className="w-4 h-4" /> },
     { id: "alpha-lookup", label: "Name Lookup", icon: <BookA className="w-4 h-4" /> },
@@ -75,6 +75,33 @@ export function PrintView() {
                 {f.label}
               </button>
             ))}
+            {format === "floor-plan" && (
+              <div className="border-t pt-3 mt-2 space-y-3">
+                <div>
+                  <Label className="text-xs">Pages</Label>
+                  <div className="flex gap-1 mt-1">
+                    {([1, 2, 4] as const).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setFloorPlanPages(p)}
+                        className={`flex-1 text-xs py-1.5 rounded border font-medium transition-colors ${
+                          floorPlanPages === p
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-muted/50 border-muted hover:bg-muted"
+                        }`}
+                      >
+                        {p === 1 ? "1 page" : p === 2 ? "2 pages" : "4 pages"}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {floorPlanPages === 1 && "Entire floor plan on one page"}
+                    {floorPlanPages === 2 && "Split left/right across 2 pages"}
+                    {floorPlanPages === 4 && "Split into 4 quadrants"}
+                  </p>
+                </div>
+              </div>
+            )}
             {format === "alpha-lookup" && (
               <div className="border-t pt-3 mt-2 space-y-3">
                 <div>
@@ -152,20 +179,11 @@ export function PrintView() {
               className="bg-white rounded border p-6 min-h-[400px]"
               style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}
             >
-              {format === "seating-chart" && (
-                <SeatingChart tables={tables} guests={guests} />
-              )}
-              {format === "guest-list" && (
-                <GuestListPrint guests={sortedGuests} tables={tables} />
-              )}
-              {format === "table-cards" && (
-                <PlaceCards guests={assignedGuests} tables={tables} />
-              )}
               {format === "floor-plan" && (
-                <FloorPlanPrint tables={tables} guests={guests} labels={labels} />
+                <FloorPlanPrint tables={tables} guests={guests} labels={labels} pages={floorPlanPages} />
               )}
               {format === "allergy-map" && (
-                <AllergyMap tables={tables} guests={guests} />
+                <AllergyMap tables={tables} guests={guests} labels={labels} />
               )}
               {format === "alpha-lookup" && (
                 <AlphaLookup
@@ -186,335 +204,139 @@ export function PrintView() {
 const S = {
   h1: { fontSize: 20, marginBottom: 16, fontWeight: 700 } as const,
   summary: { fontSize: 12, color: "#666", marginBottom: 16 } as const,
-  tableCard: {
-    border: "1px solid #ccc",
-    borderRadius: 6,
-    padding: 12,
-    marginBottom: 12,
-    breakInside: "avoid" as const,
-  },
-  h3: { fontSize: 14, marginBottom: 8, color: "#333", fontWeight: 600 } as const,
-  seatRow: {
-    display: "flex",
-    gap: 4,
-    fontSize: 12,
-    padding: "3px 0",
-    borderBottom: "1px solid #f0f0f0",
-  } as const,
-  seatNum: { width: 30, color: "#999" } as const,
-  empty: { color: "#bbb", fontStyle: "italic" as const },
-  guestRow: {
-    display: "flex",
-    justifyContent: "space-between" as const,
-    fontSize: 13,
-    padding: "4px 0",
-    borderBottom: "1px solid #f0f0f0",
-  } as const,
-  placeCards: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
-    gap: 12,
-  } as const,
-  placeCard: {
-    border: "1.5px solid #aaa",
-    borderRadius: 8,
-    padding: "20px 16px",
-    textAlign: "center" as const,
-    breakInside: "avoid" as const,
-  },
-  placeName: { fontSize: 18, fontWeight: 600 } as const,
-  placeInfo: { fontSize: 11, color: "#888", marginTop: 6 } as const,
 };
-
-function SeatingChart({ tables, guests }: { tables: Table[]; guests: Guest[] }) {
-  const guestMap = new Map(guests.map((g) => [g.id, g]));
-  return (
-    <div>
-      <h1 style={S.h1}>Seating Chart</h1>
-      <div style={S.summary}>
-        {guests.length} guests · {tables.length} tables
-      </div>
-      {tables.map((table) => (
-        <div key={table.id} style={S.tableCard}>
-          <h3 style={S.h3}>
-            {table.name} — {table.assignedGuests.length}/{table.capacity} seats
-          </h3>
-          {table.seats.map((seat) => {
-            const guest = seat.guestId ? guestMap.get(seat.guestId) : null;
-            return (
-              <div key={seat.position} style={S.seatRow}>
-                <span style={S.seatNum}>{seat.position + 1}.</span>
-                {guest ? (
-                  <span>{guest.name}</span>
-                ) : (
-                  <span style={S.empty}>Empty</span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ))}
-      {tables.length === 0 && <p style={{ color: "#999" }}>No tables configured.</p>}
-    </div>
-  );
-}
-
-function GuestListPrint({ guests, tables }: { guests: Guest[]; tables: Table[] }) {
-  const tableMap = new Map(tables.map((t) => [t.id, t]));
-  return (
-    <div>
-      <h1 style={S.h1}>Guest List</h1>
-      <div style={S.summary}>{guests.length} guests</div>
-      {guests.map((g) => {
-        const table = g.assignedTableId ? tableMap.get(g.assignedTableId) : null;
-        return (
-          <div key={g.id} style={S.guestRow}>
-            <span>{g.name}</span>
-            <span style={{ color: table ? "#333" : "#bbb" }}>
-              {table
-                ? `${table.name}${g.seatPosition !== null ? ` #${g.seatPosition + 1}` : ""}`
-                : "Unassigned"}
-            </span>
-          </div>
-        );
-      })}
-      {guests.length === 0 && <p style={{ color: "#999" }}>No guests added.</p>}
-    </div>
-  );
-}
-
-function PlaceCards({ guests, tables }: { guests: Guest[]; tables: Table[] }) {
-  const tableMap = new Map(tables.map((t) => [t.id, t]));
-  const sorted = [...guests].sort((a, b) => a.name.localeCompare(b.name));
-  return (
-    <div>
-      <h1 style={S.h1}>Place Cards</h1>
-      <div style={S.summary}>{sorted.length} cards</div>
-      <div style={S.placeCards}>
-        {sorted.map((g) => {
-          const table = g.assignedTableId ? tableMap.get(g.assignedTableId) : null;
-          return (
-            <div key={g.id} style={S.placeCard}>
-              <div style={S.placeName}>{g.name}</div>
-              {table && (
-                <div style={S.placeInfo}>
-                  {table.name}
-                  {g.seatPosition !== null && ` · Seat ${g.seatPosition + 1}`}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {sorted.length === 0 && <p style={{ color: "#999" }}>No assigned guests.</p>}
-    </div>
-  );
-}
 
 const ALLERGY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  [DietaryRestriction.VEGETARIAN]: { bg: "#dcfce7", text: "#166534", border: "#86efac" },
-  [DietaryRestriction.VEGAN]: { bg: "#bbf7d0", text: "#14532d", border: "#4ade80" },
-  [DietaryRestriction.PESCATARIAN]: { bg: "#dbeafe", text: "#1e40af", border: "#93c5fd" },
-  [DietaryRestriction.LACTOSE_INTOLERANT]: { bg: "#fef9c3", text: "#854d0e", border: "#fde047" },
+  [DietaryRestriction.VEGETARIAN]: { bg: "#dcfce7", text: "#166534", border: "#22c55e" },
+  [DietaryRestriction.VEGAN]: { bg: "#bbf7d0", text: "#14532d", border: "#16a34a" },
+  [DietaryRestriction.PESCATARIAN]: { bg: "#dbeafe", text: "#1e40af", border: "#3b82f6" },
+  [DietaryRestriction.LACTOSE_INTOLERANT]: { bg: "#fef9c3", text: "#854d0e", border: "#eab308" },
 };
 
-function AllergyMap({ tables, guests }: { tables: Table[]; guests: Guest[] }) {
-  const guestMap = new Map(guests.map((g) => [g.id, g]));
-
-  const allergicGuests = guests.filter(
-    (g) =>
-      g.dietaryRestrictions?.length > 0 &&
-      !g.dietaryRestrictions.includes(DietaryRestriction.NONE)
+function AllergyMap({ tables, guests, labels }: { tables: Table[]; guests: Guest[]; labels: FloorLabel[] }) {
+  const allergicGuests = useMemo(
+    () => guests.filter((g) => g.dietaryRestrictions?.length > 0 && !g.dietaryRestrictions.includes(DietaryRestriction.NONE)),
+    [guests]
   );
 
-  const activeRestrictions = new Set<DietaryRestriction>();
-  for (const g of allergicGuests) {
-    for (const r of g.dietaryRestrictions) {
-      if (r !== DietaryRestriction.NONE) activeRestrictions.add(r);
-    }
-  }
+  const allergyGuestMap = useMemo(
+    () => new Map(allergicGuests.map((g) => [g.id, g])),
+    [allergicGuests]
+  );
 
-  const legendItems = [...activeRestrictions].sort();
+  const seatColorOverride = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const g of allergicGuests) {
+      const restrictions = g.dietaryRestrictions.filter((r) => r !== DietaryRestriction.NONE);
+      if (restrictions.length > 0) {
+        map.set(g.id, ALLERGY_COLORS[restrictions[0]]?.border ?? "#999");
+      }
+    }
+    return map;
+  }, [allergicGuests]);
+
+  const activeRestrictions = useMemo(() => {
+    const set = new Set<DietaryRestriction>();
+    for (const g of allergicGuests) {
+      for (const r of g.dietaryRestrictions) {
+        if (r !== DietaryRestriction.NONE) set.add(r);
+      }
+    }
+    return [...set].sort();
+  }, [allergicGuests]);
+
+  const noopSeatClick = () => {};
+
+  if (tables.length === 0)
+    return <p style={{ color: "#999" }}>No tables configured.</p>;
+
+  if (allergicGuests.length === 0)
+    return (
+      <div>
+        <h1 style={S.h1}>Allergy Map</h1>
+        <p style={{ color: "#999", fontSize: 13 }}>No guests have dietary restrictions set.</p>
+      </div>
+    );
+
+  const PAD = 350;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const t of tables) {
+    minX = Math.min(minX, t.position.x - PAD);
+    minY = Math.min(minY, t.position.y - PAD);
+    maxX = Math.max(maxX, t.position.x + PAD);
+    maxY = Math.max(maxY, t.position.y + PAD);
+  }
+  for (const l of labels) {
+    minX = Math.min(minX, l.position.x - l.width - 50);
+    minY = Math.min(minY, l.position.y - l.height - 50);
+    maxX = Math.max(maxX, l.position.x + l.width + 50);
+    maxY = Math.max(maxY, l.position.y + l.height + 50);
+  }
+  const totalW = maxX - minX;
+  const totalH = maxY - minY;
 
   return (
     <div>
       <h1 style={S.h1}>Allergy Map</h1>
       <div style={S.summary}>
-        {allergicGuests.length} guest{allergicGuests.length !== 1 ? "s" : ""} with dietary restrictions ·{" "}
-        {tables.length} tables
+        {allergicGuests.length} guest{allergicGuests.length !== 1 ? "s" : ""} with dietary restrictions · {tables.length} tables
       </div>
 
-      {/* Legend */}
-      {legendItems.length > 0 && (
+      {activeRestrictions.length > 0 && (
         <div
           style={{
             display: "flex",
             flexWrap: "wrap",
             gap: 12,
-            marginBottom: 20,
+            marginBottom: 16,
             padding: "10px 14px",
             border: "1px solid #e5e7eb",
             borderRadius: 6,
             backgroundColor: "#fafafa",
           }}
         >
-          <span style={{ fontSize: 12, fontWeight: 600, color: "#555", marginRight: 4 }}>
-            Legend:
-          </span>
-          {legendItems.map((r) => {
+          <span style={{ fontSize: 12, fontWeight: 600, color: "#555", marginRight: 4 }}>Legend:</span>
+          {activeRestrictions.map((r) => {
             const c = ALLERGY_COLORS[r];
             return (
-              <span
-                key={r}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  fontSize: 12,
-                }}
-              >
-                <span
-                  style={{
-                    width: 14,
-                    height: 14,
-                    borderRadius: 3,
-                    backgroundColor: c?.bg ?? "#eee",
-                    border: `2px solid ${c?.border ?? "#ccc"}`,
-                    display: "inline-block",
-                  }}
-                />
+              <span key={r} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                <span style={{
+                  width: 14, height: 14, borderRadius: "50%",
+                  backgroundColor: c?.bg ?? "#eee",
+                  border: `3px solid ${c?.border ?? "#ccc"}`,
+                  display: "inline-block",
+                }} />
                 {DIETARY_RESTRICTION_LABELS[r]}
               </span>
             );
           })}
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 12,
-              color: "#999",
-            }}
-          >
-            <span
-              style={{
-                width: 14,
-                height: 14,
-                borderRadius: 3,
-                backgroundColor: "#fff",
-                border: "1px solid #ddd",
-                display: "inline-block",
-              }}
-            />
-            No restrictions
-          </span>
         </div>
       )}
 
-      {/* Tables */}
-      {tables.map((table) => {
-        const seatsWithAllergies = table.seats.filter((seat) => {
-          if (!seat.guestId) return false;
-          const g = guestMap.get(seat.guestId);
-          return (
-            g?.dietaryRestrictions?.length > 0 &&
-            !g.dietaryRestrictions.includes(DietaryRestriction.NONE)
-          );
-        });
-        return (
-          <div key={table.id} style={S.tableCard}>
-            <h3 style={S.h3}>
-              {table.name}
-              {seatsWithAllergies.length > 0 && (
-                <span style={{ fontSize: 11, fontWeight: 400, color: "#d97706", marginLeft: 8 }}>
-                  {seatsWithAllergies.length} allerg{seatsWithAllergies.length === 1 ? "y" : "ies"}
-                </span>
-              )}
-            </h3>
-            {table.seats.map((seat) => {
-              const guest = seat.guestId ? guestMap.get(seat.guestId) : null;
-              const restrictions =
-                guest?.dietaryRestrictions?.filter(
-                  (r: DietaryRestriction) => r !== DietaryRestriction.NONE
-                ) ?? [];
-              const hasAllergy = restrictions.length > 0;
-              const primaryColor = hasAllergy
-                ? ALLERGY_COLORS[restrictions[0]]
-                : null;
-
-              return (
-                <div
-                  key={seat.position}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    fontSize: 12,
-                    padding: "4px 6px",
-                    marginBottom: 2,
-                    borderRadius: 4,
-                    backgroundColor: primaryColor?.bg ?? "transparent",
-                    border: hasAllergy
-                      ? `1.5px solid ${primaryColor?.border ?? "#ccc"}`
-                      : "1px solid transparent",
-                    borderBottom: hasAllergy ? undefined : "1px solid #f0f0f0",
-                  }}
-                >
-                  <span style={{ width: 26, color: "#999", flexShrink: 0 }}>
-                    {seat.position + 1}.
-                  </span>
-                  {guest ? (
-                    <>
-                      <span
-                        style={{
-                          flex: 1,
-                          fontWeight: hasAllergy ? 600 : 400,
-                          color: primaryColor?.text ?? "#333",
-                        }}
-                      >
-                        {guest.name}
-                      </span>
-                      {restrictions.length > 0 && (
-                        <span style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                          {restrictions.map((r: DietaryRestriction) => {
-                            const c = ALLERGY_COLORS[r];
-                            return (
-                              <span
-                                key={r}
-                                style={{
-                                  fontSize: 10,
-                                  padding: "1px 6px",
-                                  borderRadius: 10,
-                                  backgroundColor: c?.border ?? "#ddd",
-                                  color: c?.text ?? "#333",
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {DIETARY_RESTRICTION_LABELS[r]}
-                              </span>
-                            );
-                          })}
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <span style={S.empty}>Empty</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        );
-      })}
-
-      {tables.length === 0 && (
-        <p style={{ color: "#999" }}>No tables configured.</p>
-      )}
-      {tables.length > 0 && allergicGuests.length === 0 && (
-        <p style={{ color: "#999", marginTop: 12, fontSize: 13 }}>
-          No guests have dietary restrictions set.
-        </p>
-      )}
+      <svg
+        viewBox={`${minX} ${minY} ${totalW} ${totalH}`}
+        overflow="visible"
+        style={{ width: "100%", height: "auto", aspectRatio: `${totalW} / ${totalH}` }}
+      >
+        {labels.map((l) => (
+          <g key={l.id} transform={`translate(${l.position.x},${l.position.y}) rotate(${l.rotation})`}>
+            <rect x={-l.width / 2} y={-l.height / 2} width={l.width} height={l.height} fill="white" stroke="#aaa" strokeWidth="1" rx="3" />
+            <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={l.fontSize} fill="#333" fontWeight="500">{l.text}</text>
+          </g>
+        ))}
+        {tables.map((table) => (
+          <g key={table.id} transform={`translate(${table.position.x},${table.position.y}) rotate(${table.rotation})`}>
+            <TableRenderer
+              table={table}
+              guestMap={allergyGuestMap}
+              selectedSeat={null}
+              onSeatClick={noopSeatClick}
+              isSelected={false}
+              seatColorOverride={seatColorOverride}
+            />
+          </g>
+        ))}
+      </svg>
     </div>
   );
 }
@@ -611,46 +433,102 @@ function AlphaLookup({
   );
 }
 
-function FloorPlanPrint({ tables, guests, labels }: { tables: Table[]; guests: Guest[]; labels: FloorLabel[] }) {
+function FloorPlanPrint({
+  tables,
+  guests,
+  labels,
+  pages,
+}: {
+  tables: Table[];
+  guests: Guest[];
+  labels: FloorLabel[];
+  pages: 1 | 2 | 4;
+}) {
+  const guestMap = useMemo(() => new Map(guests.map((g) => [g.id, g])), [guests]);
+  const noopSeatClick = () => {};
+
   if (tables.length === 0 && labels.length === 0)
     return <p style={{ color: "#999" }}>No floor plan elements.</p>;
 
+  const PAD = 350;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const t of tables) {
-    minX = Math.min(minX, t.position.x - 300);
-    minY = Math.min(minY, t.position.y - 300);
-    maxX = Math.max(maxX, t.position.x + 300);
-    maxY = Math.max(maxY, t.position.y + 300);
+    minX = Math.min(minX, t.position.x - PAD);
+    minY = Math.min(minY, t.position.y - PAD);
+    maxX = Math.max(maxX, t.position.x + PAD);
+    maxY = Math.max(maxY, t.position.y + PAD);
   }
   for (const l of labels) {
-    minX = Math.min(minX, l.position.x - l.width);
-    minY = Math.min(minY, l.position.y - l.height);
-    maxX = Math.max(maxX, l.position.x + l.width);
-    maxY = Math.max(maxY, l.position.y + l.height);
+    minX = Math.min(minX, l.position.x - l.width - 50);
+    minY = Math.min(minY, l.position.y - l.height - 50);
+    maxX = Math.max(maxX, l.position.x + l.width + 50);
+    maxY = Math.max(maxY, l.position.y + l.height + 50);
   }
+
+  const totalW = maxX - minX;
+  const totalH = maxY - minY;
+
+  const slices: { vbX: number; vbY: number; vbW: number; vbH: number; label: string }[] = [];
+  if (pages === 1) {
+    slices.push({ vbX: minX, vbY: minY, vbW: totalW, vbH: totalH, label: "" });
+  } else if (pages === 2) {
+    const halfW = totalW / 2;
+    slices.push({ vbX: minX, vbY: minY, vbW: halfW, vbH: totalH, label: "Left half" });
+    slices.push({ vbX: minX + halfW, vbY: minY, vbW: halfW, vbH: totalH, label: "Right half" });
+  } else {
+    const halfW = totalW / 2;
+    const halfH = totalH / 2;
+    slices.push({ vbX: minX, vbY: minY, vbW: halfW, vbH: halfH, label: "Top-left" });
+    slices.push({ vbX: minX + halfW, vbY: minY, vbW: halfW, vbH: halfH, label: "Top-right" });
+    slices.push({ vbX: minX, vbY: minY + halfH, vbW: halfW, vbH: halfH, label: "Bottom-left" });
+    slices.push({ vbX: minX + halfW, vbY: minY + halfH, vbW: halfW, vbH: halfH, label: "Bottom-right" });
+  }
+
+  const renderSVGContent = () => (
+    <>
+      {labels.map((l) => (
+        <g key={l.id} transform={`translate(${l.position.x},${l.position.y}) rotate(${l.rotation})`}>
+          <rect x={-l.width / 2} y={-l.height / 2} width={l.width} height={l.height} fill="white" stroke="#aaa" strokeWidth="1" rx="3" />
+          <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={l.fontSize} fill="#333" fontWeight="500">{l.text}</text>
+        </g>
+      ))}
+      {tables.map((table) => (
+        <g key={table.id} transform={`translate(${table.position.x},${table.position.y}) rotate(${table.rotation})`}>
+          <TableRenderer
+            table={table}
+            guestMap={guestMap}
+            selectedSeat={null}
+            onSeatClick={noopSeatClick}
+            isSelected={false}
+          />
+        </g>
+      ))}
+    </>
+  );
 
   return (
     <div>
-      <h1 style={S.h1}>Floor Plan</h1>
-      <div style={S.summary}>{tables.length} tables · {labels.length} labels</div>
-      <svg
-        viewBox={`${minX - 50} ${minY - 50} ${maxX - minX + 100} ${maxY - minY + 100}`}
-        style={{ width: "100%", maxHeight: 600, border: "1px solid #eee", borderRadius: 4 }}
-      >
-        {labels.map((l) => (
-          <g key={l.id} transform={`translate(${l.position.x},${l.position.y}) rotate(${l.rotation})`}>
-            <rect x={-l.width / 2} y={-l.height / 2} width={l.width} height={l.height} fill="white" stroke="#aaa" strokeWidth="1" rx="3" />
-            <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={l.fontSize} fill="#333" fontWeight="500">{l.text}</text>
-          </g>
-        ))}
-        {tables.map((table) => (
-          <g key={table.id} transform={`translate(${table.position.x},${table.position.y}) rotate(${table.rotation})`}>
-            <rect x={-60} y={-20} width={120} height={40} fill="white" stroke="#bbb" strokeWidth="1" rx="3" />
-            <text x={0} y={-3} textAnchor="middle" fontSize="11" fill="#333" fontWeight="500">{table.name}</text>
-            <text x={0} y={10} textAnchor="middle" fontSize="9" fill="#999">{table.assignedGuests.length}/{table.capacity}</text>
-          </g>
-        ))}
-      </svg>
+      {slices.map((slice, i) => (
+        <div
+          key={i}
+          style={{
+            pageBreakAfter: i < slices.length - 1 ? "always" : undefined,
+            marginBottom: i < slices.length - 1 ? 24 : 0,
+          }}
+        >
+          <svg
+            viewBox={`${slice.vbX} ${slice.vbY} ${slice.vbW} ${slice.vbH}`}
+            overflow="visible"
+            style={{
+              width: "100%",
+              height: "auto",
+              aspectRatio: `${slice.vbW} / ${slice.vbH}`,
+            }}
+          >
+            {renderSVGContent()}
+          </svg>
+        </div>
+      ))}
     </div>
   );
 }

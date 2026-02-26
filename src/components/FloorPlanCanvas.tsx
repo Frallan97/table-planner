@@ -16,6 +16,7 @@ interface Props {
   onDeleteSelected?: () => void;
   onCopySelected?: () => void;
   onPasteSelected?: () => void;
+  readOnly?: boolean;
 }
 
 const DEFAULT_VB = { x: -100, y: -50, w: 1400, h: 950 };
@@ -34,6 +35,7 @@ export function FloorPlanCanvas({
   onDeleteSelected,
   onCopySelected,
   onPasteSelected,
+  readOnly = false,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [vb, setVb] = useState(DEFAULT_VB);
@@ -58,6 +60,7 @@ export function FloorPlanCanvas({
   } | null>(null);
   const [, forceRender] = useState(0);
   const [snapGuides, setSnapGuides] = useState<{ axis: "x" | "y"; value: number }[]>([]);
+  const [boxSelect, setBoxSelect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
 
   const guestMap = useMemo(
     () => new Map(guests.map((g) => [g.id, g])),
@@ -77,6 +80,19 @@ export function FloorPlanCanvas({
     [vb.w, vb.h]
   );
 
+  const clientToSVG = useCallback(
+    (cx: number, cy: number) => {
+      const svg = svgRef.current;
+      if (!svg) return { x: 0, y: 0 };
+      const rect = svg.getBoundingClientRect();
+      return {
+        x: vb.x + ((cx - rect.left) / rect.width) * vb.w,
+        y: vb.y + ((cy - rect.top) / rect.height) * vb.h,
+      };
+    },
+    [vb.x, vb.y, vb.w, vb.h]
+  );
+
   const selectedTableIds = selectedItem?.type === "table" ? selectedItem.ids : [];
 
   const handleTableMouseDown = (e: React.MouseEvent, tableId: string) => {
@@ -84,6 +100,11 @@ export function FloorPlanCanvas({
     e.preventDefault();
     const table = tables.find((t) => t.id === tableId);
     if (!table) return;
+
+    if (readOnly) {
+      onItemSelect({ type: "table", ids: [tableId] });
+      return;
+    }
 
     const isInSelection = selectedTableIds.includes(tableId);
     const isMulti = isInSelection && selectedTableIds.length > 1 && !e.shiftKey;
@@ -111,6 +132,7 @@ export function FloorPlanCanvas({
   const handleLabelMouseDown = (e: React.MouseEvent, labelId: string) => {
     e.stopPropagation();
     e.preventDefault();
+    if (readOnly) return;
     const label = labels.find((l) => l.id === labelId);
     if (!label) return;
     dragRef.current = {
@@ -126,13 +148,21 @@ export function FloorPlanCanvas({
 
   const handleLabelSelect = selectedItem?.type === "label" ? selectedItem.id : null;
 
+  const boxSelectRef = useRef<{ x1: number; y1: number } | null>(null);
+
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     if (e.button === 0 && !dragRef.current) {
-      panRef.current = {
-        startClient: { x: e.clientX, y: e.clientY },
-        startVB: { ...vb },
-      };
-      onItemSelect(null);
+      if (e.shiftKey && !readOnly) {
+        const pt = clientToSVG(e.clientX, e.clientY);
+        boxSelectRef.current = { x1: pt.x, y1: pt.y };
+        setBoxSelect({ x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y });
+      } else {
+        panRef.current = {
+          startClient: { x: e.clientX, y: e.clientY },
+          startVB: { ...vb },
+        };
+        onItemSelect(null);
+      }
     }
   };
 
@@ -181,6 +211,14 @@ export function FloorPlanCanvas({
 
       setSnapGuides(guides);
       setDragOffset({ id: drag.id, multi: drag.multi, dx, dy });
+    } else if (boxSelectRef.current) {
+      const pt = clientToSVG(e.clientX, e.clientY);
+      setBoxSelect({
+        x1: boxSelectRef.current.x1,
+        y1: boxSelectRef.current.y1,
+        x2: pt.x,
+        y2: pt.y,
+      });
     } else if (panRef.current) {
       const p = panRef.current;
       const d = clientToSVGDelta(
@@ -222,6 +260,22 @@ export function FloorPlanCanvas({
         });
       }
     }
+    if (boxSelectRef.current && boxSelect) {
+      const minX = Math.min(boxSelect.x1, boxSelect.x2);
+      const maxX = Math.max(boxSelect.x1, boxSelect.x2);
+      const minY = Math.min(boxSelect.y1, boxSelect.y2);
+      const maxY = Math.max(boxSelect.y1, boxSelect.y2);
+      const ids = tables
+        .filter((t) => t.position.x >= minX && t.position.x <= maxX && t.position.y >= minY && t.position.y <= maxY)
+        .map((t) => t.id);
+      if (ids.length > 0) {
+        onItemSelect({ type: "table", ids });
+      } else {
+        onItemSelect(null);
+      }
+      boxSelectRef.current = null;
+      setBoxSelect(null);
+    }
     dragRef.current = null;
     panRef.current = null;
     setDragOffset(null);
@@ -250,6 +304,7 @@ export function FloorPlanCanvas({
   };
 
   useEffect(() => {
+    if (readOnly) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
@@ -265,11 +320,47 @@ export function FloorPlanCanvas({
       } else if (mod && e.key === "v" && onPasteSelected) {
         e.preventDefault();
         onPasteSelected();
+      } else if (mod && e.key === "a" && tables.length > 0) {
+        e.preventDefault();
+        onItemSelect({ type: "table", ids: tables.map((t) => t.id) });
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedItem, onItemSelect, onDeleteSelected, onCopySelected, onPasteSelected]);
+  }, [readOnly, selectedItem, onItemSelect, onDeleteSelected, onCopySelected, onPasteSelected, tables]);
+
+  const fitToContent = useCallback(() => {
+    const allPositions: { x: number; y: number }[] = [
+      ...tables.map((t) => t.position),
+      ...labels.map((l) => l.position),
+    ];
+    if (allPositions.length === 0) {
+      setVb(DEFAULT_VB);
+      return;
+    }
+    const ELEMENT_PAD = 200;
+    const minX = Math.min(...allPositions.map((p) => p.x)) - ELEMENT_PAD;
+    const maxX = Math.max(...allPositions.map((p) => p.x)) + ELEMENT_PAD;
+    const minY = Math.min(...allPositions.map((p) => p.y)) - ELEMENT_PAD;
+    const maxY = Math.max(...allPositions.map((p) => p.y)) + ELEMENT_PAD;
+    const contentW = maxX - minX;
+    const contentH = maxY - minY;
+    const svg = svgRef.current;
+    if (svg) {
+      const rect = svg.getBoundingClientRect();
+      const aspect = rect.width / rect.height;
+      let w = contentW;
+      let h = contentH;
+      if (w / h > aspect) {
+        h = w / aspect;
+      } else {
+        w = h * aspect;
+      }
+      setVb({ x: minX - (w - contentW) / 2, y: minY - (h - contentH) / 2, w, h });
+    } else {
+      setVb({ x: minX, y: minY, w: contentW, h: contentH });
+    }
+  }, [tables, labels]);
 
   return (
     <div className="relative w-full h-full">
@@ -301,6 +392,12 @@ export function FloorPlanCanvas({
           −
         </button>
         <button
+          onClick={fitToContent}
+          className="px-2 py-1 bg-white border rounded text-xs shadow-sm hover:bg-gray-50"
+        >
+          Fit
+        </button>
+        <button
           onClick={() => setVb(DEFAULT_VB)}
           className="px-2 py-1 bg-white border rounded text-xs shadow-sm hover:bg-gray-50"
         >
@@ -312,7 +409,7 @@ export function FloorPlanCanvas({
         ref={svgRef}
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
         className="w-full bg-[#fafafa] rounded-lg border"
-        style={{ height: "100%", minHeight: "500px" }}
+        style={{ height: "100%" }}
         onMouseDown={handleCanvasMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -450,6 +547,20 @@ export function FloorPlanCanvas({
               pointerEvents="none"
             />
           )
+        )}
+
+        {boxSelect && (
+          <rect
+            x={Math.min(boxSelect.x1, boxSelect.x2)}
+            y={Math.min(boxSelect.y1, boxSelect.y2)}
+            width={Math.abs(boxSelect.x2 - boxSelect.x1)}
+            height={Math.abs(boxSelect.y2 - boxSelect.y1)}
+            fill="rgba(59, 130, 246, 0.08)"
+            stroke="#3b82f6"
+            strokeWidth="1"
+            strokeDasharray="6 3"
+            pointerEvents="none"
+          />
         )}
       </svg>
     </div>

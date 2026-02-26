@@ -4,6 +4,7 @@ metadata:
   name: {{ include "table-planner.fullname" . }}
   labels:
     {{- include "table-planner.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -11,6 +12,7 @@ spec:
   selector:
     matchLabels:
       {{- include "table-planner.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -19,6 +21,7 @@ spec:
       {{- end }}
       labels:
         {{- include "table-planner.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: frontend
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -43,6 +46,18 @@ spec:
           {{- toYaml .Values.readinessProbe | nindent 12 }}
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
+        {{- if .Values.backend.enabled }}
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: default.conf
+        {{- end }}
+      {{- if .Values.backend.enabled }}
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: {{ include "table-planner.fullname" . }}-nginx
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -1,28 +1,36 @@
+import { useMemo, useCallback } from "react";
 import { useLocalStorage } from "./useLocalStorage";
 import { Guest, DietaryRestriction } from "@/lib/types";
 
 export function useGuests() {
   const [storedGuests, setStoredGuests] = useLocalStorage<Guest[]>("tablePlanner_guests", []);
 
-  // Migration: Ensure all guests have seatPosition
-  const guests = storedGuests.map((guest) => {
-    if (guest.seatPosition === undefined) {
-      return { ...guest, seatPosition: null };
-    }
-    return guest;
-  });
+  const guests = useMemo(
+    () =>
+      storedGuests.map((guest) => {
+        const patched = { ...guest };
+        if (patched.seatPosition === undefined) patched.seatPosition = null;
+        if (patched.guestOf === undefined) patched.guestOf = null;
+        return patched;
+      }),
+    [storedGuests]
+  );
 
-  const setGuests = (value: Guest[] | ((prev: Guest[]) => Guest[])) => {
-    setStoredGuests(value);
-  };
+  const setGuests = useCallback(
+    (value: Guest[] | ((prev: Guest[]) => Guest[])) => {
+      setStoredGuests(value);
+    },
+    [setStoredGuests]
+  );
 
-  const addGuest = (name: string, dietaryRestrictions: DietaryRestriction[] = []) => {
+  const addGuest = (name: string, dietaryRestrictions: DietaryRestriction[] = [], guestOf: string | null = null) => {
     const newGuest: Guest = {
       id: crypto.randomUUID(),
       name: name.trim(),
       dietaryRestrictions,
       assignedTableId: null,
       seatPosition: null,
+      guestOf,
       createdAt: new Date(),
     };
     setGuests((prev) => [...prev, newGuest]);
@@ -39,6 +47,7 @@ export function useGuests() {
         dietaryRestrictions: [DietaryRestriction.NONE],
         assignedTableId: null,
         seatPosition: null,
+        guestOf: null,
         createdAt: new Date(),
       }));
     setGuests((prev) => [...prev, ...newGuests]);

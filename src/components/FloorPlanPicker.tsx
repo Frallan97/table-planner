@@ -1,0 +1,168 @@
+import { useState, useEffect, useCallback } from "react";
+import { api, type FloorPlanSummary } from "@/lib/api";
+import { usePlannerFloorPlan } from "@/hooks/PlannerContext";
+import { useAuth } from "@/hooks/useAuth";
+import { Plus, Trash2, Loader2, LogOut, FolderOpen } from "lucide-react";
+
+export function FloorPlanPicker() {
+  const { setCurrentFloorPlan } = usePlannerFloorPlan();
+  const { user, logout } = useAuth();
+  const [plans, setPlans] = useState<FloorPlanSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+
+  const fetchPlans = useCallback(async () => {
+    try {
+      const data = await api.listFloorPlans();
+      setPlans(data);
+    } catch (err) {
+      console.error("Failed to fetch floor plans:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPlans();
+  }, [fetchPlans]);
+
+  const handleCreate = async () => {
+    if (!newName.trim()) return;
+    setCreating(true);
+    try {
+      const plan = await api.createFloorPlan(newName.trim());
+      setCurrentFloorPlan(plan.id, plan.name);
+    } catch (err) {
+      console.error("Failed to create floor plan:", err);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this floor plan? This cannot be undone.")) return;
+    try {
+      await api.deleteFloorPlan(id);
+      setPlans((prev) => prev.filter((p) => p.id !== id));
+    } catch (err) {
+      console.error("Failed to delete floor plan:", err);
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto p-4 lg:p-8 max-w-3xl">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold">Table Planner</h1>
+            <p className="text-muted-foreground mt-1">
+              Welcome back, {user?.name}
+            </p>
+          </div>
+          <button
+            onClick={logout}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors rounded border"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign out
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Your Floor Plans</h2>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New Floor Plan
+          </button>
+        </div>
+
+        {showCreate && (
+          <div className="border rounded-lg p-4 mb-4 bg-card">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                placeholder="Floor plan name..."
+                className="flex-1 px-3 py-2 border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                autoFocus
+              />
+              <button
+                onClick={handleCreate}
+                disabled={creating || !newName.trim()}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create"}
+              </button>
+              <button
+                onClick={() => {
+                  setShowCreate(false);
+                  setNewName("");
+                }}
+                className="px-4 py-2 border rounded-lg text-sm hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : plans.length === 0 ? (
+          <div className="border rounded-lg p-12 text-center text-muted-foreground bg-muted/20">
+            <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p className="text-lg font-medium mb-1">No floor plans yet</p>
+            <p className="text-sm">Create your first floor plan to get started.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {plans.map((plan) => (
+              <button
+                key={plan.id}
+                onClick={() => setCurrentFloorPlan(plan.id, plan.name)}
+                className="w-full flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors text-left group"
+              >
+                <div>
+                  <p className="font-medium">{plan.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Last updated {formatDate(plan.updatedAt)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    onClick={(e) => handleDelete(e, plan.id)}
+                    className="p-1.5 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100 rounded"
+                    role="button"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

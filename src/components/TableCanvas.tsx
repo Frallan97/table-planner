@@ -165,7 +165,7 @@ export function TableCanvas({ selectedItem, onSelectItem }: Props) {
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col min-h-0 gap-2 pb-3">
-        <div className="flex-1 min-h-[400px]">
+        <div className="flex-1 min-h-0">
           <FloorPlanCanvas
             tables={tables}
             guests={guests}
