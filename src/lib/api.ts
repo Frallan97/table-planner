@@ -1,5 +1,13 @@
-const API_BASE = import.meta.env.VITE_API_URL ?? "";
-const AUTH_SERVICE_URL = import.meta.env.VITE_AUTH_SERVICE_URL || "http://localhost:8081";
+let API_BASE = "";
+let AUTH_SERVICE_URL = "http://localhost:8081";
+try {
+  if (typeof import.meta !== "undefined" && import.meta.env) {
+    API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
+    AUTH_SERVICE_URL = (import.meta.env.VITE_AUTH_SERVICE_URL as string | undefined) || "http://localhost:8081";
+  }
+} catch {
+  // import.meta not available (e.g. some runtimes)
+}
 
 let accessToken: string | null = null;
 let onUnauthorized: (() => void) | null = null;
