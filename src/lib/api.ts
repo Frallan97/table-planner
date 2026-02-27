@@ -1,12 +1,25 @@
 let API_BASE = "";
 let AUTH_SERVICE_URL = "http://localhost:8081";
+
 try {
-  if (typeof import.meta !== "undefined" && import.meta.env) {
-    API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
-    AUTH_SERVICE_URL = (import.meta.env.VITE_AUTH_SERVICE_URL as string | undefined) || "http://localhost:8081";
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    const isLocal =
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "0.0.0.0";
+
+    if (isLocal) {
+      API_BASE = "http://localhost:8082";
+      AUTH_SERVICE_URL = "http://localhost:8081";
+    } else {
+      // Production: same-origin API via nginx proxy and external auth service
+      API_BASE = "";
+      AUTH_SERVICE_URL = "https://auth.vibeoholic.com";
+    }
   }
 } catch {
-  // import.meta not available (e.g. some runtimes)
+  // Fallback to defaults if window is not available
 }
 
 let accessToken: string | null = null;
