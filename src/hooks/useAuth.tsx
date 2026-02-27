@@ -33,18 +33,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // Clear local state immediately
+    clearAuth();
+
+    // Set flag to prevent auto-refresh after logout
+    sessionStorage.setItem("tp_logout_in_progress", "true");
+
     try {
       // Call auth-service logout to clear refresh token cookie
-      await fetch(getLoginURL().replace("/login", "/logout"), {
+      const logoutUrl = getLoginURL().replace("/login", "/logout");
+      await fetch(logoutUrl, {
         method: "POST",
         credentials: "include",
       });
     } catch (error) {
       console.error("Logout request failed:", error);
     }
-    clearAuth();
-    // Force redirect to login page
-    window.location.href = "/";
+
+    // Use location.replace to fully reload page without history entry
+    // This ensures we don't try to refresh the token
+    setTimeout(() => {
+      sessionStorage.removeItem("tp_logout_in_progress");
+      window.location.replace("/");
+    }, 100);
   }, [clearAuth]);
 
   // Attempt token refresh on mount
@@ -52,6 +63,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOnUnauthorized(clearAuth);
 
     const init = async () => {
+      // Don't auto-refresh if logout is in progress
+      if (sessionStorage.getItem("tp_logout_in_progress") === "true") {
+        sessionStorage.removeItem("tp_logout_in_progress");
+        setIsLoading(false);
+        return;
+      }
+
       await loadRuntimeConfig();
       // Check for token in sessionStorage (persists across page refreshes within tab)
       const storedToken = sessionStorage.getItem("tp_access_token");
