@@ -1,6 +1,12 @@
 # -- Frontend (nginx serving static files + API proxy)
 replicaCount: 2
 
+# Runtime config served as /config.json (overrides hostname-based defaults in browser)
+frontend:
+  config:
+    authServiceUrl: "https://auth.vibeoholic.com"
+    apiBase: ""
+
 image:
   repository: ghcr.io/frallan97/table-planner
   pullPolicy: Always

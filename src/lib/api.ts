@@ -1,25 +1,41 @@
 let API_BASE = "";
 let AUTH_SERVICE_URL = "http://localhost:8081";
 
-try {
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    const isLocal =
-      host === "localhost" ||
-      host === "127.0.0.1" ||
-      host === "0.0.0.0";
+function setDefaultsFromHostname() {
+  try {
+    if (typeof window !== "undefined") {
+      const host = window.location.hostname;
+      const isLocal =
+        host === "localhost" ||
+        host === "127.0.0.1" ||
+        host === "0.0.0.0";
 
-    if (isLocal) {
-      API_BASE = "http://localhost:8082";
-      AUTH_SERVICE_URL = "http://localhost:8081";
-    } else {
-      // Production: same-origin API via nginx proxy and external auth service
-      API_BASE = "";
-      AUTH_SERVICE_URL = "https://auth.vibeoholic.com";
+      if (isLocal) {
+        API_BASE = "http://localhost:8082";
+        AUTH_SERVICE_URL = "http://localhost:8081";
+      } else {
+        API_BASE = "";
+        AUTH_SERVICE_URL = "https://auth.vibeoholic.com";
+      }
     }
+  } catch {
+    // Fallback
   }
-} catch {
-  // Fallback to defaults if window is not available
+}
+
+setDefaultsFromHostname();
+
+/** Load optional /config.json to override API and auth URLs (e.g. in prod without rebuild). */
+export async function loadRuntimeConfig(): Promise<void> {
+  try {
+    const r = await fetch("/config.json", { cache: "no-store" });
+    if (!r.ok) return;
+    const c = (await r.json()) as { authServiceUrl?: string; apiBase?: string };
+    if (c.authServiceUrl) AUTH_SERVICE_URL = c.authServiceUrl;
+    if (c.apiBase !== undefined) API_BASE = c.apiBase;
+  } catch {
+    // Ignore
+  }
 }
 
 let accessToken: string | null = null;

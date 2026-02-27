@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "table-planner.fullname" . }}-frontend-config
+  labels:
+    {{- include "table-planner.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+data:
+  config.json: |
+    {
+      "authServiceUrl": {{ .Values.frontend.config.authServiceUrl | quote }},
+      "apiBase": {{ .Values.frontend.config.apiBase | quote }}
+    }

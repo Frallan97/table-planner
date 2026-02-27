@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
-import { setAccessToken, getAccessToken, setOnUnauthorized, getLoginURL, getRefreshURL } from "@/lib/api";
+import { setAccessToken, setOnUnauthorized, getLoginURL, getRefreshURL, loadRuntimeConfig } from "@/lib/api";
 
 interface User {
   id: string;
@@ -41,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOnUnauthorized(clearAuth);
 
     const init = async () => {
+      await loadRuntimeConfig();
       // Check for token in sessionStorage (persists across page refreshes within tab)
       const storedToken = sessionStorage.getItem("tp_access_token");
       if (storedToken) {
