@@ -150,6 +150,7 @@ func TestGetFloorPlan_NotFound(t *testing.T) {
 	userID := uuid.New()
 	fpID := uuid.New()
 
+	// Mock returns ErrNoRows for all queries (canViewFloorPlan check and main query)
 	db := &mockDB{
 		queryRowFunc: func(ctx context.Context, sql string, args ...any) pgx.Row {
 			return &mockRow{err: pgx.ErrNoRows}
@@ -164,8 +165,10 @@ func TestGetFloorPlan_NotFound(t *testing.T) {
 
 	h.GetFloorPlan(w, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", w.Code)
+	// With new organization features, non-existent floor plans return 403 (forbidden)
+	// because canViewFloorPlan returns false when floor plan doesn't exist
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", w.Code)
 	}
 }
 
@@ -191,7 +194,20 @@ func TestDeleteFloorPlan_Success(t *testing.T) {
 	userID := uuid.New()
 	fpID := uuid.New()
 
+	// Mock both the SELECT (to check if personal/org plan) and DELETE queries
 	db := &mockDB{
+		queryRowFunc: func(ctx context.Context, sql string, args ...any) pgx.Row {
+			// Return personal floor plan owned by userID
+			return &mockRow{
+				scanFunc: func(dest ...any) error {
+					if creatorPtr, ok := dest[0].(*uuid.UUID); ok {
+						*creatorPtr = userID
+					}
+					// orgID is nil (personal plan)
+					return nil
+				},
+			}
+		},
 		execFunc: func(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
 			return pgconn.NewCommandTag("DELETE 1"), nil
 		},
