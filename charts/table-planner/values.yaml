@@ -1,5 +1,5 @@
 # -- Frontend (nginx serving static files + API proxy)
-replicaCount: 2
+replicaCount: 1
 
 # Runtime config served as /config.json (overrides hostname-based defaults in browser)
 frontend:

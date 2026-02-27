@@ -32,8 +32,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = getLoginURL();
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      // Call auth-service logout to clear refresh token cookie
+      await fetch(getLoginURL().replace("/login", "/logout"), {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (error) {
+      console.error("Logout request failed:", error);
+    }
     clearAuth();
+    // Force redirect to login page
+    window.location.href = "/";
   }, [clearAuth]);
 
   // Attempt token refresh on mount
