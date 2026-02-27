@@ -1,32 +1,64 @@
-import { useState, useEffect, useCallback } from "react";
-import { api, type FloorPlanSummary } from "@/lib/api";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { api, type FloorPlanSummary, type OrganizationWithRole } from "@/lib/api";
 import { usePlannerFloorPlan } from "@/hooks/PlannerContext";
 import { useAuth } from "@/hooks/useAuth";
-import { Plus, Trash2, Loader2, LogOut, FolderOpen } from "lucide-react";
+import { Plus, Trash2, Loader2, LogOut, FolderOpen, Building2, Settings } from "lucide-react";
+import { OrganizationManager } from "./OrganizationManager";
+
+type FilterType = "all" | "personal" | string; // string for org IDs
 
 export function FloorPlanPicker() {
   const { setCurrentFloorPlan } = usePlannerFloorPlan();
   const { user, logout } = useAuth();
   const [plans, setPlans] = useState<FloorPlanSummary[]>([]);
+  const [organizations, setOrganizations] = useState<OrganizationWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<FilterType>("all");
+  const [showOrgManager, setShowOrgManager] = useState(false);
 
-  const fetchPlans = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const data = await api.listFloorPlans();
-      setPlans(data);
+      const [plansData, orgsData] = await Promise.all([
+        api.listFloorPlans(),
+        api.listOrganizations(),
+      ]);
+      setPlans(plansData);
+      setOrganizations(orgsData);
     } catch (err) {
-      console.error("Failed to fetch floor plans:", err);
+      console.error("Failed to fetch data:", err);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchPlans();
-  }, [fetchPlans]);
+    fetchData();
+  }, [fetchData]);
+
+  // Filter plans based on active filter
+  const filteredPlans = useMemo(() => {
+    if (activeFilter === "all") return plans;
+    if (activeFilter === "personal") {
+      return plans.filter((p) => p.isPersonal);
+    }
+    // Filter by organization ID
+    return plans.filter((p) => p.organizationId === activeFilter);
+  }, [plans, activeFilter]);
+
+  // Count plans per filter
+  const filterCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: plans.length,
+      personal: plans.filter((p) => p.isPersonal).length,
+    };
+    organizations.forEach((org) => {
+      counts[org.id] = plans.filter((p) => p.organizationId === org.id).length;
+    });
+    return counts;
+  }, [plans, organizations]);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
@@ -65,7 +97,7 @@ export function FloorPlanPicker() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto p-4 lg:p-8 max-w-3xl">
+      <div className="container mx-auto p-4 lg:p-8 max-w-4xl">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold">Table Planner</h1>
@@ -82,8 +114,59 @@ export function FloorPlanPicker() {
           </button>
         </div>
 
+        {/* Filter Tabs */}
+        <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
+          <button
+            onClick={() => setActiveFilter("all")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+              activeFilter === "all"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted hover:bg-muted/80"
+            }`}
+          >
+            All ({filterCounts.all})
+          </button>
+          <button
+            onClick={() => setActiveFilter("personal")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+              activeFilter === "personal"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted hover:bg-muted/80"
+            }`}
+          >
+            Personal ({filterCounts.personal})
+          </button>
+          {organizations.map((org) => (
+            <button
+              key={org.id}
+              onClick={() => setActiveFilter(org.id)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                activeFilter === org.id
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted hover:bg-muted/80"
+              }`}
+            >
+              {org.name} ({filterCounts[org.id] || 0})
+            </button>
+          ))}
+          <button
+            onClick={() => setShowOrgManager(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border hover:bg-muted transition-colors whitespace-nowrap ml-auto"
+            title="Manage Organizations"
+          >
+            <Settings className="w-4 h-4" />
+            Organizations
+          </button>
+        </div>
+
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Your Floor Plans</h2>
+          <h2 className="text-lg font-semibold">
+            {activeFilter === "all"
+              ? "All Floor Plans"
+              : activeFilter === "personal"
+              ? "Personal Floor Plans"
+              : organizations.find((o) => o.id === activeFilter)?.name || "Floor Plans"}
+          </h2>
           <button
             onClick={() => setShowCreate(true)}
             className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
@@ -129,22 +212,38 @@ export function FloorPlanPicker() {
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
-        ) : plans.length === 0 ? (
+        ) : filteredPlans.length === 0 ? (
           <div className="border rounded-lg p-12 text-center text-muted-foreground bg-muted/20">
             <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p className="text-lg font-medium mb-1">No floor plans yet</p>
-            <p className="text-sm">Create your first floor plan to get started.</p>
+            <p className="text-lg font-medium mb-1">No floor plans in this filter</p>
+            <p className="text-sm">
+              {activeFilter === "personal"
+                ? "Create your first personal floor plan to get started."
+                : "No floor plans found for this filter."}
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
-            {plans.map((plan) => (
+            {filteredPlans.map((plan) => (
               <button
                 key={plan.id}
                 onClick={() => setCurrentFloorPlan(plan.id, plan.name)}
                 className="w-full flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors text-left group"
               >
-                <div>
-                  <p className="font-medium">{plan.name}</p>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="font-medium">{plan.name}</p>
+                    {plan.isPersonal ? (
+                      <span className="px-2 py-0.5 text-xs bg-muted text-muted-foreground rounded">
+                        Personal
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 px-2 py-0.5 text-xs bg-primary/10 text-primary rounded">
+                        <Building2 className="w-3 h-3" />
+                        {plan.organizationName}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     Last updated {formatDate(plan.updatedAt)}
                   </p>
@@ -161,6 +260,16 @@ export function FloorPlanPicker() {
               </button>
             ))}
           </div>
+        )}
+
+        {/* OrganizationManager modal */}
+        {showOrgManager && (
+          <OrganizationManager
+            onClose={() => {
+              setShowOrgManager(false);
+              fetchData(); // Refresh data when closing
+            }}
+          />
         )}
       </div>
     </div>

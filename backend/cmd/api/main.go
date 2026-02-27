@@ -70,7 +70,34 @@ func main() {
 			r.Put("/{id}", h.UpdateFloorPlan)
 			r.Delete("/{id}", h.DeleteFloorPlan)
 			r.Put("/{id}/save", h.BulkSave)
+
+			// Share/unshare endpoints
+			r.Post("/{id}/share", h.ShareFloorPlan)
+			r.Post("/{id}/unshare", h.UnshareFloorPlan)
+
+			// Lock endpoints
+			r.Post("/{id}/lock", h.AcquireLock)
+			r.Delete("/{id}/lock", h.ReleaseLock)
+			r.Put("/{id}/lock/heartbeat", h.RefreshLock)
+			r.Get("/{id}/lock/status", h.GetLockStatusHandler)
 		})
+
+		r.Route("/organizations", func(r chi.Router) {
+			r.Get("/", h.ListOrganizations)
+			r.Post("/", h.CreateOrganization)
+			r.Get("/{id}", h.GetOrganization)
+			r.Put("/{id}", h.UpdateOrganization)
+			r.Delete("/{id}", h.DeleteOrganization)
+
+			// Member management
+			r.Get("/{id}/members", h.ListOrgMembers)
+			r.Post("/{id}/members/invite", h.InviteMember)
+			r.Delete("/{id}/members/{memberId}", h.RemoveMember)
+			r.Put("/{id}/members/{memberId}", h.UpdateMemberRole)
+		})
+
+		// Invitation acceptance (no org ID needed, uses token)
+		r.Post("/invitations/{token}/accept", h.AcceptInvitation)
 	})
 
 	srv := &http.Server{

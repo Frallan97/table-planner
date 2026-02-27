@@ -33,13 +33,14 @@ func (h *Handler) BulkSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify ownership
-	var ownerID uuid.UUID
-	err = h.pool.QueryRow(r.Context(),
-		`SELECT user_id FROM floor_plans WHERE id = $1`, fpID,
-	).Scan(&ownerID)
-	if err != nil || ownerID != userID {
-		http.Error(w, `{"error":"floor plan not found"}`, http.StatusNotFound)
+	// Check if user can edit this floor plan
+	canEdit, err := h.canEditFloorPlan(r.Context(), userID, fpID)
+	if err != nil {
+		http.Error(w, `{"error":"database error"}`, http.StatusInternalServerError)
+		return
+	}
+	if !canEdit {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 		return
 	}
 

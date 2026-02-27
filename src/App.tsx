@@ -1,12 +1,16 @@
 import "./index.css";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TableBuilder } from "./components/TableBuilder";
 import { TableCanvas } from "./components/TableCanvas";
 import { GuestManager } from "./components/GuestManager";
 import { PrintView } from "./components/PrintView";
 import { FloorPlanPicker } from "./components/FloorPlanPicker";
+import { ShareControl } from "./components/ShareControl";
+import { LockBanner } from "./components/LockBanner";
 import { useAuth } from "./hooks/useAuth";
 import { usePlannerFloorPlan } from "./hooks/PlannerContext";
+import { useFloorPlanLock } from "./hooks/useFloorPlanLock";
+import { api, type FloorPlanFull } from "./lib/api";
 import type { SelectedItem } from "./lib/types";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { MapPin, Users, Printer, LogIn, LogOut, Loader2, ArrowLeft, Cloud, CloudOff } from "lucide-react";
@@ -18,6 +22,26 @@ export function App() {
   const { currentFloorPlanId, currentFloorPlanName, setCurrentFloorPlan, isSaving, lastSaved } = usePlannerFloorPlan();
   const [activeTab, setActiveTab] = useState<Tab>("floorplan");
   const [selectedItem, setSelectedItem] = useState<SelectedItem>(null);
+  const [floorPlanDetails, setFloorPlanDetails] = useState<FloorPlanFull | null>(null);
+  const { lockStatus, isLocked, acquireLock } = useFloorPlanLock(currentFloorPlanId);
+
+  // Fetch floor plan details when floor plan changes
+  useEffect(() => {
+    if (currentFloorPlanId) {
+      api.getFloorPlan(currentFloorPlanId)
+        .then(setFloorPlanDetails)
+        .catch(err => console.error("Failed to fetch floor plan details:", err));
+    } else {
+      setFloorPlanDetails(null);
+    }
+  }, [currentFloorPlanId]);
+
+  // Try to acquire lock when floor plan opens (if not locked by another user)
+  useEffect(() => {
+    if (currentFloorPlanId && !isLocked) {
+      acquireLock();
+    }
+  }, [currentFloorPlanId, isLocked, acquireLock]);
 
   if (isLoading) {
     return (
@@ -98,6 +122,23 @@ export function App() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {floorPlanDetails && user && (
+              <ShareControl
+                floorPlanId={currentFloorPlanId!}
+                currentOrgId={floorPlanDetails.organizationId}
+                currentOrgName={floorPlanDetails.organizationName}
+                isPersonal={!floorPlanDetails.organizationId}
+                isCreator={floorPlanDetails.userId === user.id}
+                onShare={() => {
+                  // Refresh floor plan details after share/unshare
+                  if (currentFloorPlanId) {
+                    api.getFloorPlan(currentFloorPlanId)
+                      .then(setFloorPlanDetails)
+                      .catch(err => console.error("Failed to refresh floor plan details:", err));
+                  }
+                }}
+              />
+            )}
             <div className="flex border rounded-lg overflow-hidden bg-muted/30">
               {tabs.map((tab) => (
                 <button
@@ -130,6 +171,11 @@ export function App() {
         </div>
 
         <div style={{ height: "calc(100vh - 120px)" }}>
+          {/* Lock Banner */}
+          {isLocked && lockStatus && (
+            <LockBanner lock={lockStatus} />
+          )}
+
           {activeTab === "floorplan" && (
             <ErrorBoundary>
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full">

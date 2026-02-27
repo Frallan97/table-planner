@@ -123,6 +123,9 @@ export interface FloorPlanSummary {
   id: string;
   userId: string;
   name: string;
+  organizationId?: string;
+  organizationName?: string;
+  isPersonal: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -131,11 +134,53 @@ export interface FloorPlanFull {
   id: string;
   userId: string;
   name: string;
+  organizationId?: string;
+  organizationName?: string;
   createdAt: string;
   updatedAt: string;
   tables: unknown[];
   guests: unknown[];
   labels: unknown[];
+  lock?: FloorPlanLock;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OrganizationWithRole extends Organization {
+  role: string;
+}
+
+export interface OrganizationMember {
+  organizationId: string;
+  userId: string;
+  email: string;
+  role: string;
+  joinedAt: string;
+}
+
+export interface OrganizationInvitation {
+  id: string;
+  organizationId: string;
+  email: string;
+  role: string;
+  token: string;
+  invitedBy: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface FloorPlanLock {
+  floorPlanId: string;
+  userId: string;
+  userEmail?: string;
+  lockedAt: string;
+  expiresAt: string;
 }
 
 function validateResponse<T>(schema: ZodSchema<T>, data: unknown): T {
@@ -182,6 +227,104 @@ export const api = {
     return request(`/api/floor-plans/${id}/save`, {
       method: "PUT",
       body: JSON.stringify(data),
+    });
+  },
+
+  // Share/Unshare
+  shareFloorPlan(fpId: string, organizationId: string): Promise<{ status: string }> {
+    return request(`/api/floor-plans/${fpId}/share`, {
+      method: "POST",
+      body: JSON.stringify({ organizationId }),
+    });
+  },
+
+  unshareFloorPlan(fpId: string): Promise<{ status: string }> {
+    return request(`/api/floor-plans/${fpId}/unshare`, {
+      method: "POST",
+    });
+  },
+
+  // Floor Plan Locking
+  acquireLock(fpId: string): Promise<FloorPlanLock> {
+    return request(`/api/floor-plans/${fpId}/lock`, {
+      method: "POST",
+    });
+  },
+
+  releaseLock(fpId: string): Promise<void> {
+    return request(`/api/floor-plans/${fpId}/lock`, {
+      method: "DELETE",
+    });
+  },
+
+  refreshLockHeartbeat(fpId: string): Promise<FloorPlanLock> {
+    return request(`/api/floor-plans/${fpId}/lock/heartbeat`, {
+      method: "PUT",
+    });
+  },
+
+  getLockStatus(fpId: string): Promise<{ locked: boolean; lock?: FloorPlanLock }> {
+    return request(`/api/floor-plans/${fpId}/lock/status`);
+  },
+
+  // Organizations
+  listOrganizations(): Promise<OrganizationWithRole[]> {
+    return request("/api/organizations");
+  },
+
+  createOrganization(name: string): Promise<Organization> {
+    return request("/api/organizations", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  getOrganization(id: string): Promise<OrganizationWithRole> {
+    return request(`/api/organizations/${id}`);
+  },
+
+  updateOrganization(id: string, name: string): Promise<Organization> {
+    return request(`/api/organizations/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  deleteOrganization(id: string): Promise<void> {
+    return request(`/api/organizations/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  // Organization Members
+  listOrgMembers(orgId: string): Promise<OrganizationMember[]> {
+    return request(`/api/organizations/${orgId}/members`);
+  },
+
+  inviteMember(orgId: string, email: string, role: string): Promise<OrganizationInvitation> {
+    return request(`/api/organizations/${orgId}/members/invite`, {
+      method: "POST",
+      body: JSON.stringify({ email, role }),
+    });
+  },
+
+  removeMember(orgId: string, memberId: string): Promise<void> {
+    return request(`/api/organizations/${orgId}/members/${memberId}`, {
+      method: "DELETE",
+    });
+  },
+
+  updateMemberRole(orgId: string, memberId: string, role: string): Promise<OrganizationMember> {
+    return request(`/api/organizations/${orgId}/members/${memberId}`, {
+      method: "PUT",
+      body: JSON.stringify({ role }),
+    });
+  },
+
+  // Invitations
+  acceptInvitation(token: string): Promise<OrganizationMember> {
+    return request(`/api/invitations/${token}/accept`, {
+      method: "POST",
     });
   },
 };
