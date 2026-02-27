@@ -33,14 +33,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    // Clear local state immediately
-    clearAuth();
+    // Set flag FIRST to prevent auto-refresh after page reload
+    // Use localStorage so it persists across page reload
+    localStorage.setItem("tp_logout_in_progress", "true");
 
-    // Set flag to prevent auto-refresh after logout
-    sessionStorage.setItem("tp_logout_in_progress", "true");
+    // Clear local state
+    clearAuth();
 
     try {
       // Call auth-service logout to clear refresh token cookie
+      // IMPORTANT: Wait for this to complete before reloading
       const logoutUrl = getLoginURL().replace("/login", "/logout");
       await fetch(logoutUrl, {
         method: "POST",
@@ -50,12 +52,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("Logout request failed:", error);
     }
 
-    // Use location.replace to fully reload page without history entry
-    // This ensures we don't try to refresh the token
+    // Wait a bit to ensure cookie is cleared, then reload
+    // Use replace() to avoid history entry
     setTimeout(() => {
-      sessionStorage.removeItem("tp_logout_in_progress");
       window.location.replace("/");
-    }, 100);
+    }, 200);
   }, [clearAuth]);
 
   // Attempt token refresh on mount
@@ -63,9 +64,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOnUnauthorized(clearAuth);
 
     const init = async () => {
-      // Don't auto-refresh if logout is in progress
-      if (sessionStorage.getItem("tp_logout_in_progress") === "true") {
-        sessionStorage.removeItem("tp_logout_in_progress");
+      // Don't auto-refresh if logout just happened
+      // Check localStorage (persists across reloads)
+      if (localStorage.getItem("tp_logout_in_progress") === "true") {
+        localStorage.removeItem("tp_logout_in_progress");
         setIsLoading(false);
         return;
       }
