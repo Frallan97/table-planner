@@ -1,11 +1,35 @@
 package handlers
 
-import "github.com/jackc/pgx/v5/pgxpool"
+import (
+	"context"
+	"encoding/json"
+	"net/http"
 
-type Handler struct {
-	pool *pgxpool.Pool
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+)
+
+const maxBodySize = 5 * 1024 * 1024 // 5 MB
+
+// DB abstracts the database operations needed by handlers.
+// *pgxpool.Pool satisfies this interface.
+type DB interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
-func New(pool *pgxpool.Pool) *Handler {
+type Handler struct {
+	pool DB
+}
+
+func New(pool DB) *Handler {
 	return &Handler{pool: pool}
+}
+
+func decodeJSON(r *http.Request, dst any) error {
+	r.Body = http.MaxBytesReader(nil, r.Body, maxBodySize)
+	dec := json.NewDecoder(r.Body)
+	return dec.Decode(dst)
 }

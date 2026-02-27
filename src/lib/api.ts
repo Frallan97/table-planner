@@ -1,3 +1,6 @@
+import type { ZodSchema } from "zod";
+import { floorPlanSummarySchema, floorPlanFullSchema } from "./schemas";
+
 let API_BASE = "";
 let AUTH_SERVICE_URL = "http://localhost:8081";
 
@@ -135,9 +138,19 @@ export interface FloorPlanFull {
   labels: unknown[];
 }
 
+function validateResponse<T>(schema: ZodSchema<T>, data: unknown): T {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    console.warn("API response validation failed:", result.error.issues);
+    return data as T;
+  }
+  return result.data;
+}
+
 export const api = {
-  listFloorPlans(): Promise<FloorPlanSummary[]> {
-    return request("/api/floor-plans");
+  async listFloorPlans(): Promise<FloorPlanSummary[]> {
+    const data = await request<unknown[]>("/api/floor-plans");
+    return data.map((item) => validateResponse(floorPlanSummarySchema, item));
   },
 
   createFloorPlan(name: string): Promise<FloorPlanSummary> {
@@ -147,8 +160,9 @@ export const api = {
     });
   },
 
-  getFloorPlan(id: string): Promise<FloorPlanFull> {
-    return request(`/api/floor-plans/${id}`);
+  async getFloorPlan(id: string): Promise<FloorPlanFull> {
+    const data = await request<unknown>(`/api/floor-plans/${id}`);
+    return validateResponse(floorPlanFullSchema, data) as FloorPlanFull;
   },
 
   updateFloorPlan(id: string, name: string): Promise<void> {

@@ -13,7 +13,32 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Run backend tests
+        working-directory: ./backend
+        run: go test ./...
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install frontend dependencies
+        run: bun install
+
+      - name: Run frontend tests
+        run: bun test src/
+
   build-frontend:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -58,6 +83,7 @@ jobs:
             VITE_AUTH_SERVICE_URL=${{ vars.VITE_AUTH_SERVICE_URL || 'https://auth.vibeoholic.com' }}
 
   build-backend:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read

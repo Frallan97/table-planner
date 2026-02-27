@@ -57,8 +57,11 @@ func main() {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
+	rl := middleware.NewRateLimiter(10, 20) // 10 req/s, burst 20
+
 	r.Route("/api", func(r chi.Router) {
 		r.Use(authMW.Authenticate)
+		r.Use(rl.Middleware)
 
 		r.Route("/floor-plans", func(r chi.Router) {
 			r.Get("/", h.ListFloorPlans)

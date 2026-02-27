@@ -1,6 +1,9 @@
-import { useRef, useState, useCallback, useMemo, useEffect } from "react";
+import { useRef, useState, useMemo } from "react";
 import type { Table, Guest, FloorLabel, SelectedItem } from "@/lib/types";
 import { TableRenderer } from "./TableRenderer";
+import { useCanvasViewport } from "@/hooks/useCanvasViewport";
+import { useCanvasDrag } from "@/hooks/useCanvasDrag";
+import { useCanvasSelection } from "@/hooks/useCanvasSelection";
 
 interface Props {
   tables: Table[];
@@ -19,8 +22,6 @@ interface Props {
   readOnly?: boolean;
 }
 
-const DEFAULT_VB = { x: -100, y: -50, w: 1400, h: 950 };
-
 export function FloorPlanCanvas({
   tables,
   guests,
@@ -37,125 +38,69 @@ export function FloorPlanCanvas({
   onPasteSelected,
   readOnly = false,
 }: Props) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [vb, setVb] = useState(DEFAULT_VB);
+  const {
+    svgRef,
+    vb,
+    setVb,
+    clientToSVG,
+    clientToSVGDelta,
+    handleWheel,
+    fitToContent,
+    zoomIn,
+    zoomOut,
+    resetView,
+  } = useCanvasViewport(tables, labels);
 
-  const dragRef = useRef<{
-    kind: "table" | "label";
-    id: string;
-    multi: boolean;
-    startClient: { x: number; y: number };
-    startPos: { x: number; y: number };
-  } | null>(null);
-  const [dragOffset, setDragOffset] = useState<{
-    id: string;
-    multi: boolean;
-    dx: number;
-    dy: number;
-  } | null>(null);
+  const dragHandlers = useMemo(
+    () => ({ onTableMove, onTablesMoveMulti, onLabelMove, onItemSelect }),
+    [onTableMove, onTablesMoveMulti, onLabelMove, onItemSelect]
+  );
+
+  const {
+    dragRef,
+    dragOffset,
+    snapGuides,
+    handleTableMouseDown,
+    handleLabelMouseDown,
+    handleDragMove,
+    handleDragEnd,
+  } = useCanvasDrag(tables, labels, selectedItem, readOnly, clientToSVGDelta, vb.w, dragHandlers);
+
+  const {
+    boxSelect,
+    isBoxSelecting,
+    startBoxSelect,
+    moveBoxSelect,
+    endBoxSelect,
+  } = useCanvasSelection(
+    tables,
+    selectedItem,
+    readOnly,
+    clientToSVG,
+    onItemSelect,
+    onDeleteSelected,
+    onCopySelected,
+    onPasteSelected
+  );
 
   const panRef = useRef<{
     startClient: { x: number; y: number };
-    startVB: typeof DEFAULT_VB;
+    startVB: typeof vb;
   } | null>(null);
   const [, forceRender] = useState(0);
-  const [snapGuides, setSnapGuides] = useState<{ axis: "x" | "y"; value: number }[]>([]);
-  const [boxSelect, setBoxSelect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
 
   const guestMap = useMemo(
     () => new Map(guests.map((g) => [g.id, g])),
     [guests]
   );
 
-  const clientToSVGDelta = useCallback(
-    (dx: number, dy: number) => {
-      const svg = svgRef.current;
-      if (!svg) return { dx: 0, dy: 0 };
-      const rect = svg.getBoundingClientRect();
-      return {
-        dx: (dx / rect.width) * vb.w,
-        dy: (dy / rect.height) * vb.h,
-      };
-    },
-    [vb.w, vb.h]
-  );
-
-  const clientToSVG = useCallback(
-    (cx: number, cy: number) => {
-      const svg = svgRef.current;
-      if (!svg) return { x: 0, y: 0 };
-      const rect = svg.getBoundingClientRect();
-      return {
-        x: vb.x + ((cx - rect.left) / rect.width) * vb.w,
-        y: vb.y + ((cy - rect.top) / rect.height) * vb.h,
-      };
-    },
-    [vb.x, vb.y, vb.w, vb.h]
-  );
-
   const selectedTableIds = selectedItem?.type === "table" ? selectedItem.ids : [];
-
-  const handleTableMouseDown = (e: React.MouseEvent, tableId: string) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const table = tables.find((t) => t.id === tableId);
-    if (!table) return;
-
-    if (readOnly) {
-      onItemSelect({ type: "table", ids: [tableId] });
-      return;
-    }
-
-    const isInSelection = selectedTableIds.includes(tableId);
-    const isMulti = isInSelection && selectedTableIds.length > 1 && !e.shiftKey;
-
-    dragRef.current = {
-      kind: "table",
-      id: tableId,
-      multi: isMulti,
-      startClient: { x: e.clientX, y: e.clientY },
-      startPos: { ...table.position },
-    };
-    setDragOffset({ id: tableId, multi: isMulti, dx: 0, dy: 0 });
-
-    if (e.shiftKey && selectedItem?.type === "table") {
-      const prev = selectedItem.ids;
-      const next = prev.includes(tableId)
-        ? prev.filter((id) => id !== tableId)
-        : [...prev, tableId];
-      onItemSelect(next.length > 0 ? { type: "table", ids: next } : null);
-    } else if (!isInSelection) {
-      onItemSelect({ type: "table", ids: [tableId] });
-    }
-  };
-
-  const handleLabelMouseDown = (e: React.MouseEvent, labelId: string) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (readOnly) return;
-    const label = labels.find((l) => l.id === labelId);
-    if (!label) return;
-    dragRef.current = {
-      kind: "label",
-      id: labelId,
-      multi: false,
-      startClient: { x: e.clientX, y: e.clientY },
-      startPos: { ...label.position },
-    };
-    setDragOffset({ id: labelId, multi: false, dx: 0, dy: 0 });
-    onItemSelect({ type: "label", id: labelId });
-  };
-
-  const handleLabelSelect = selectedItem?.type === "label" ? selectedItem.id : null;
-
-  const boxSelectRef = useRef<{ x1: number; y1: number } | null>(null);
+  const selectedLabelId = selectedItem?.type === "label" ? selectedItem.id : null;
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     if (e.button === 0 && !dragRef.current) {
       if (e.shiftKey && !readOnly) {
-        const pt = clientToSVG(e.clientX, e.clientY);
-        boxSelectRef.current = { x1: pt.x, y1: pt.y };
-        setBoxSelect({ x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y });
+        startBoxSelect(e);
       } else {
         panRef.current = {
           startClient: { x: e.clientX, y: e.clientY },
@@ -167,59 +112,9 @@ export function FloorPlanCanvas({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    const drag = dragRef.current;
-    if (drag) {
-      const d = clientToSVGDelta(
-        e.clientX - drag.startClient.x,
-        e.clientY - drag.startClient.y
-      );
-      let dx = d.dx;
-      let dy = d.dy;
-      const guides: { axis: "x" | "y"; value: number }[] = [];
-
-      if (!drag.multi) {
-        const SNAP = 8 * (vb.w / 1400);
-        const tentX = drag.startPos.x + dx;
-        const tentY = drag.startPos.y + dy;
-
-        const otherPositions: { x: number; y: number }[] = [];
-        for (const t of tables) {
-          if (t.id !== drag.id) otherPositions.push(t.position);
-        }
-        if (drag.kind === "label") {
-          for (const t of tables) otherPositions.push(t.position);
-        } else {
-          for (const l of labels) otherPositions.push(l.position);
-        }
-
-        let snappedX = false;
-        let snappedY = false;
-        for (const pos of otherPositions) {
-          if (!snappedX && Math.abs(tentX - pos.x) < SNAP) {
-            dx = pos.x - drag.startPos.x;
-            guides.push({ axis: "x", value: pos.x });
-            snappedX = true;
-          }
-          if (!snappedY && Math.abs(tentY - pos.y) < SNAP) {
-            dy = pos.y - drag.startPos.y;
-            guides.push({ axis: "y", value: pos.y });
-            snappedY = true;
-          }
-          if (snappedX && snappedY) break;
-        }
-      }
-
-      setSnapGuides(guides);
-      setDragOffset({ id: drag.id, multi: drag.multi, dx, dy });
-    } else if (boxSelectRef.current) {
-      const pt = clientToSVG(e.clientX, e.clientY);
-      setBoxSelect({
-        x1: boxSelectRef.current.x1,
-        y1: boxSelectRef.current.y1,
-        x2: pt.x,
-        y2: pt.y,
-      });
-    } else if (panRef.current) {
+    if (handleDragMove(e)) return;
+    if (moveBoxSelect(e)) return;
+    if (panRef.current) {
       const p = panRef.current;
       const d = clientToSVGDelta(
         e.clientX - p.startClient.x,
@@ -234,175 +129,19 @@ export function FloorPlanCanvas({
   };
 
   const handleMouseUp = () => {
-    const drag = dragRef.current;
-    if (drag && dragOffset) {
-      if (drag.kind === "table" && drag.multi) {
-        const moves = selectedTableIds.map((id) => {
-          const t = tables.find((tbl) => tbl.id === id);
-          return {
-            id,
-            pos: {
-              x: Math.round((t?.position.x ?? 0) + dragOffset.dx),
-              y: Math.round((t?.position.y ?? 0) + dragOffset.dy),
-            },
-          };
-        });
-        onTablesMoveMulti(moves);
-      } else if (drag.kind === "table") {
-        onTableMove(drag.id, {
-          x: Math.round(drag.startPos.x + dragOffset.dx),
-          y: Math.round(drag.startPos.y + dragOffset.dy),
-        });
-      } else {
-        onLabelMove(drag.id, {
-          x: Math.round(drag.startPos.x + dragOffset.dx),
-          y: Math.round(drag.startPos.y + dragOffset.dy),
-        });
-      }
-    }
-    if (boxSelectRef.current && boxSelect) {
-      const minX = Math.min(boxSelect.x1, boxSelect.x2);
-      const maxX = Math.max(boxSelect.x1, boxSelect.x2);
-      const minY = Math.min(boxSelect.y1, boxSelect.y2);
-      const maxY = Math.max(boxSelect.y1, boxSelect.y2);
-      const ids = tables
-        .filter((t) => t.position.x >= minX && t.position.x <= maxX && t.position.y >= minY && t.position.y <= maxY)
-        .map((t) => t.id);
-      if (ids.length > 0) {
-        onItemSelect({ type: "table", ids });
-      } else {
-        onItemSelect(null);
-      }
-      boxSelectRef.current = null;
-      setBoxSelect(null);
-    }
-    dragRef.current = null;
+    handleDragEnd();
+    if (isBoxSelecting) endBoxSelect();
     panRef.current = null;
-    setDragOffset(null);
-    setSnapGuides([]);
     forceRender((n) => n + 1);
   };
-
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const factor = e.deltaY > 0 ? 1.08 : 0.92;
-    const svg = svgRef.current;
-    if (!svg) return;
-    const rect = svg.getBoundingClientRect();
-    const mx = ((e.clientX - rect.left) / rect.width);
-    const my = ((e.clientY - rect.top) / rect.height);
-    setVb((prev) => {
-      const svgX = prev.x + mx * prev.w;
-      const svgY = prev.y + my * prev.h;
-      return {
-        x: svgX - (svgX - prev.x) * factor,
-        y: svgY - (svgY - prev.y) * factor,
-        w: prev.w * factor,
-        h: prev.h * factor,
-      };
-    });
-  };
-
-  useEffect(() => {
-    if (readOnly) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      const mod = e.ctrlKey || e.metaKey;
-      if (e.key === "Escape") {
-        onItemSelect(null);
-      } else if ((e.key === "Delete" || e.key === "Backspace") && selectedItem && onDeleteSelected) {
-        e.preventDefault();
-        onDeleteSelected();
-      } else if (mod && e.key === "c" && onCopySelected) {
-        e.preventDefault();
-        onCopySelected();
-      } else if (mod && e.key === "v" && onPasteSelected) {
-        e.preventDefault();
-        onPasteSelected();
-      } else if (mod && e.key === "a" && tables.length > 0) {
-        e.preventDefault();
-        onItemSelect({ type: "table", ids: tables.map((t) => t.id) });
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [readOnly, selectedItem, onItemSelect, onDeleteSelected, onCopySelected, onPasteSelected, tables]);
-
-  const fitToContent = useCallback(() => {
-    const allPositions: { x: number; y: number }[] = [
-      ...tables.map((t) => t.position),
-      ...labels.map((l) => l.position),
-    ];
-    if (allPositions.length === 0) {
-      setVb(DEFAULT_VB);
-      return;
-    }
-    const ELEMENT_PAD = 200;
-    const minX = Math.min(...allPositions.map((p) => p.x)) - ELEMENT_PAD;
-    const maxX = Math.max(...allPositions.map((p) => p.x)) + ELEMENT_PAD;
-    const minY = Math.min(...allPositions.map((p) => p.y)) - ELEMENT_PAD;
-    const maxY = Math.max(...allPositions.map((p) => p.y)) + ELEMENT_PAD;
-    const contentW = maxX - minX;
-    const contentH = maxY - minY;
-    const svg = svgRef.current;
-    if (svg) {
-      const rect = svg.getBoundingClientRect();
-      const aspect = rect.width / rect.height;
-      let w = contentW;
-      let h = contentH;
-      if (w / h > aspect) {
-        h = w / aspect;
-      } else {
-        w = h * aspect;
-      }
-      setVb({ x: minX - (w - contentW) / 2, y: minY - (h - contentH) / 2, w, h });
-    } else {
-      setVb({ x: minX, y: minY, w: contentW, h: contentH });
-    }
-  }, [tables, labels]);
 
   return (
     <div className="relative w-full h-full">
       <div className="absolute top-2 right-2 z-10 flex gap-1">
-        <button
-          onClick={() =>
-            setVb((p) => ({
-              x: p.x + p.w * 0.05,
-              y: p.y + p.h * 0.05,
-              w: p.w * 0.9,
-              h: p.h * 0.9,
-            }))
-          }
-          className="px-2 py-1 bg-white border rounded text-xs shadow-sm hover:bg-gray-50"
-        >
-          +
-        </button>
-        <button
-          onClick={() =>
-            setVb((p) => ({
-              x: p.x - p.w * 0.05,
-              y: p.y - p.h * 0.05,
-              w: p.w * 1.1,
-              h: p.h * 1.1,
-            }))
-          }
-          className="px-2 py-1 bg-white border rounded text-xs shadow-sm hover:bg-gray-50"
-        >
-          −
-        </button>
-        <button
-          onClick={fitToContent}
-          className="px-2 py-1 bg-white border rounded text-xs shadow-sm hover:bg-gray-50"
-        >
-          Fit
-        </button>
-        <button
-          onClick={() => setVb(DEFAULT_VB)}
-          className="px-2 py-1 bg-white border rounded text-xs shadow-sm hover:bg-gray-50"
-        >
-          Reset
-        </button>
+        <button onClick={zoomIn} className="px-2 py-1 bg-white border rounded text-xs shadow-sm hover:bg-gray-50">+</button>
+        <button onClick={zoomOut} className="px-2 py-1 bg-white border rounded text-xs shadow-sm hover:bg-gray-50">−</button>
+        <button onClick={fitToContent} className="px-2 py-1 bg-white border rounded text-xs shadow-sm hover:bg-gray-50">Fit</button>
+        <button onClick={resetView} className="px-2 py-1 bg-white border rounded text-xs shadow-sm hover:bg-gray-50">Reset</button>
       </div>
 
       <svg
@@ -431,7 +170,7 @@ export function FloorPlanCanvas({
 
         {/* Labels (rendered below tables) */}
         {labels.map((label) => {
-          const isSel = handleLabelSelect === label.id;
+          const isSel = selectedLabelId === label.id;
           const off = dragOffset?.id === label.id ? dragOffset : null;
           const lx = label.position.x + (off?.dx ?? 0);
           const ly = label.position.y + (off?.dy ?? 0);
@@ -440,9 +179,7 @@ export function FloorPlanCanvas({
               key={label.id}
               transform={`translate(${lx},${ly}) rotate(${label.rotation})`}
               onMouseDown={(e) => handleLabelMouseDown(e, label.id)}
-              style={{
-                cursor: off ? "grabbing" : "grab",
-              }}
+              style={{ cursor: off ? "grabbing" : "grab" }}
             >
               {isSel && (
                 <rect
@@ -490,22 +227,20 @@ export function FloorPlanCanvas({
           const tx = table.position.x + (off?.dx ?? 0);
           const ty = table.position.y + (off?.dy ?? 0);
           return (
-          <g
-            key={table.id}
-            transform={`translate(${tx},${ty}) rotate(${table.rotation})`}
-            onMouseDown={(e) => handleTableMouseDown(e, table.id)}
-            style={{
-              cursor: off ? "grabbing" : "grab",
-            }}
-          >
-            <TableRenderer
-              table={table}
-              guestMap={guestMap}
-              selectedSeat={selectedSeat}
-              onSeatClick={onSeatClick}
-              isSelected={selectedTableIds.includes(table.id)}
-            />
-          </g>
+            <g
+              key={table.id}
+              transform={`translate(${tx},${ty}) rotate(${table.rotation})`}
+              onMouseDown={(e) => handleTableMouseDown(e, table.id)}
+              style={{ cursor: off ? "grabbing" : "grab" }}
+            >
+              <TableRenderer
+                table={table}
+                guestMap={guestMap}
+                selectedSeat={selectedSeat}
+                onSeatClick={onSeatClick}
+                isSelected={selectedTableIds.includes(table.id)}
+              />
+            </g>
           );
         })}
 

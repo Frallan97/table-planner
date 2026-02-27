@@ -8,6 +8,7 @@ import { FloorPlanPicker } from "./components/FloorPlanPicker";
 import { useAuth } from "./hooks/useAuth";
 import { usePlannerFloorPlan } from "./hooks/PlannerContext";
 import type { SelectedItem } from "./lib/types";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { MapPin, Users, Printer, LogIn, LogOut, Loader2, ArrowLeft, Cloud, CloudOff } from "lucide-react";
 
 type Tab = "floorplan" | "guests" | "print";
@@ -130,25 +131,35 @@ export function App() {
 
         <div style={{ height: "calc(100vh - 120px)" }}>
           {activeTab === "floorplan" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full">
-              <div className="lg:col-span-3 xl:col-span-3 overflow-y-auto pr-1">
-                <TableBuilder
-                  selectedItem={selectedItem}
-                  onSelect={setSelectedItem}
-                />
+            <ErrorBoundary>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full">
+                <div className="lg:col-span-3 xl:col-span-3 overflow-y-auto pr-1">
+                  <TableBuilder
+                    selectedItem={selectedItem}
+                    onSelect={setSelectedItem}
+                  />
+                </div>
+                <div className="lg:col-span-9 xl:col-span-9">
+                  <TableCanvas
+                    selectedItem={selectedItem}
+                    onSelectItem={setSelectedItem}
+                  />
+                </div>
               </div>
-              <div className="lg:col-span-9 xl:col-span-9">
-                <TableCanvas
-                  selectedItem={selectedItem}
-                  onSelectItem={setSelectedItem}
-                />
-              </div>
-            </div>
+            </ErrorBoundary>
           )}
 
-          {activeTab === "guests" && <GuestManager />}
+          {activeTab === "guests" && (
+            <ErrorBoundary>
+              <GuestManager />
+            </ErrorBoundary>
+          )}
 
-          {activeTab === "print" && <PrintView />}
+          {activeTab === "print" && (
+            <ErrorBoundary>
+              <PrintView />
+            </ErrorBoundary>
+          )}
         </div>
       </div>
     </div>

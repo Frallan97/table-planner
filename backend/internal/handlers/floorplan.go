@@ -49,8 +49,12 @@ func (h *Handler) CreateFloorPlan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req models.CreateFloorPlanRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
 		return
 	}
 
@@ -143,8 +147,12 @@ func (h *Handler) UpdateFloorPlan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req models.UpdateFloorPlanRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
 		return
 	}
 

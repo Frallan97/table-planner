@@ -10,7 +10,15 @@ import (
 	"github.com/frallan97/table-planner-backend/internal/models"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
+
+// allowedTables whitelists table names to prevent SQL injection in dynamic queries.
+var allowedTables = map[string]bool{
+	"floor_plan_tables": true,
+	"floor_plan_guests": true,
+	"floor_plan_labels": true,
+}
 
 func (h *Handler) BulkSave(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserID(r.Context())
@@ -36,8 +44,12 @@ func (h *Handler) BulkSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req models.BulkSaveRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
 		return
 	}
 
@@ -48,48 +60,18 @@ func (h *Handler) BulkSave(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(r.Context())
 
-	// Clear existing data for this floor plan
-	for _, table := range []string{"floor_plan_tables", "floor_plan_guests", "floor_plan_labels"} {
-		if _, err := tx.Exec(r.Context(), fmt.Sprintf(`DELETE FROM %s WHERE floor_plan_id = $1`, table), fpID); err != nil {
-			http.Error(w, `{"error":"database error"}`, http.StatusInternalServerError)
-			return
-		}
+	// Upsert each entity type
+	if err := upsertEntities(r.Context(), tx, "floor_plan_tables", fpID, req.Tables); err != nil {
+		http.Error(w, `{"error":"failed to save tables"}`, http.StatusInternalServerError)
+		return
 	}
-
-	// Insert tables
-	for _, item := range req.Tables {
-		id := extractID(item)
-		if _, err := tx.Exec(r.Context(),
-			`INSERT INTO floor_plan_tables (id, floor_plan_id, data) VALUES ($1, $2, $3)`,
-			id, fpID, item,
-		); err != nil {
-			http.Error(w, `{"error":"failed to save tables"}`, http.StatusInternalServerError)
-			return
-		}
+	if err := upsertEntities(r.Context(), tx, "floor_plan_guests", fpID, req.Guests); err != nil {
+		http.Error(w, `{"error":"failed to save guests"}`, http.StatusInternalServerError)
+		return
 	}
-
-	// Insert guests
-	for _, item := range req.Guests {
-		id := extractID(item)
-		if _, err := tx.Exec(r.Context(),
-			`INSERT INTO floor_plan_guests (id, floor_plan_id, data) VALUES ($1, $2, $3)`,
-			id, fpID, item,
-		); err != nil {
-			http.Error(w, `{"error":"failed to save guests"}`, http.StatusInternalServerError)
-			return
-		}
-	}
-
-	// Insert labels
-	for _, item := range req.Labels {
-		id := extractID(item)
-		if _, err := tx.Exec(r.Context(),
-			`INSERT INTO floor_plan_labels (id, floor_plan_id, data) VALUES ($1, $2, $3)`,
-			id, fpID, item,
-		); err != nil {
-			http.Error(w, `{"error":"failed to save labels"}`, http.StatusInternalServerError)
-			return
-		}
+	if err := upsertEntities(r.Context(), tx, "floor_plan_labels", fpID, req.Labels); err != nil {
+		http.Error(w, `{"error":"failed to save labels"}`, http.StatusInternalServerError)
+		return
 	}
 
 	// Update the floor plan timestamp
@@ -108,7 +90,59 @@ func (h *Handler) BulkSave(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
+// upsertEntities deletes rows not in the incoming set, then upserts the rest.
+func upsertEntities(ctx context.Context, tx pgx.Tx, tableName string, fpID uuid.UUID, items []json.RawMessage) error {
+	if !allowedTables[tableName] {
+		return fmt.Errorf("invalid table name: %s", tableName)
+	}
+
+	// Collect IDs from incoming items
+	incomingIDs := make([]uuid.UUID, 0, len(items))
+	for _, item := range items {
+		incomingIDs = append(incomingIDs, extractID(item))
+	}
+
+	// Delete rows whose IDs are not in the incoming set
+	if len(incomingIDs) > 0 {
+		_, err := tx.Exec(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE floor_plan_id = $1 AND id != ALL($2)`, tableName),
+			fpID, incomingIDs,
+		)
+		if err != nil {
+			return err
+		}
+	} else {
+		// No items: delete everything
+		_, err := tx.Exec(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE floor_plan_id = $1`, tableName),
+			fpID,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Upsert each item
+	for i, item := range items {
+		id := incomingIDs[i]
+		_, err := tx.Exec(ctx,
+			fmt.Sprintf(`INSERT INTO %s (id, floor_plan_id, data) VALUES ($1, $2, $3)
+				ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data`, tableName),
+			id, fpID, item,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (h *Handler) getEntityData(ctx context.Context, table string, floorPlanID uuid.UUID) ([]json.RawMessage, error) {
+	if !allowedTables[table] {
+		return nil, fmt.Errorf("invalid table name: %s", table)
+	}
+
 	rows, err := h.pool.Query(ctx,
 		fmt.Sprintf(`SELECT data FROM %s WHERE floor_plan_id = $1`, table),
 		floorPlanID,
