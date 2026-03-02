@@ -447,6 +447,7 @@ function AlphaLookup({
           columnCount: columns,
           columnGap: 32,
           marginTop: 8,
+          ...(columns === 1 ? { maxWidth: 600, margin: "8px auto 0" } : {}),
         }}
       >
         {letters.map((letter) => (
