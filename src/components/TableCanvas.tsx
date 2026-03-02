@@ -11,7 +11,7 @@ import {
 import { usePlannerGuests as useGuests, usePlannerTables as useTables, usePlannerLabels as useLabels } from "@/hooks/PlannerContext";
 import { FloorPlanCanvas } from "./FloorPlanCanvas";
 import type { SelectedItem } from "@/lib/types";
-import { LayoutGrid, UserPlus, UserMinus, X } from "lucide-react";
+import { LayoutGrid, UserPlus, UserMinus, X, Eye, EyeOff } from "lucide-react";
 
 interface Props {
   selectedItem: SelectedItem;
@@ -31,6 +31,7 @@ export function TableCanvas({ selectedItem, onSelectItem }: Props) {
     position: number;
   } | null>(null);
   const [guestToAssign, setGuestToAssign] = useState("");
+  const [showGuestNames, setShowGuestNames] = useState(true);
 
   const assignedCount = guests.filter(
     (g) => g.assignedTableId !== null
@@ -148,19 +149,34 @@ export function TableCanvas({ selectedItem, onSelectItem }: Props) {
             <LayoutGrid className="w-4 h-4" />
             Floor Plan
           </CardTitle>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span>
-              <span className="font-semibold text-green-600">
-                {assignedCount}
-              </span>{" "}
-              seated
-            </span>
-            <span>
-              <span className="font-semibold text-amber-600">
-                {guests.length - assignedCount}
-              </span>{" "}
-              unassigned
-            </span>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowGuestNames(!showGuestNames)}
+              className="h-7 text-xs gap-1.5"
+              title={showGuestNames ? "Hide guest names" : "Show guest names"}
+            >
+              {showGuestNames ? (
+                <><Eye className="w-3.5 h-3.5" /> Names</>
+              ) : (
+                <><EyeOff className="w-3.5 h-3.5" /> Names</>
+              )}
+            </Button>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span>
+                <span className="font-semibold text-green-600">
+                  {assignedCount}
+                </span>{" "}
+                seated
+              </span>
+              <span>
+                <span className="font-semibold text-amber-600">
+                  {guests.length - assignedCount}
+                </span>{" "}
+                unassigned
+              </span>
+            </div>
           </div>
         </div>
       </CardHeader>
@@ -180,6 +196,7 @@ export function TableCanvas({ selectedItem, onSelectItem }: Props) {
             onDeleteSelected={handleDeleteSelected}
             onCopySelected={handleCopySelected}
             onPasteSelected={handlePasteSelected}
+            showGuestNames={showGuestNames}
           />
         </div>
 

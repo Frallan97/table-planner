@@ -20,6 +20,7 @@ interface Props {
   onCopySelected?: () => void;
   onPasteSelected?: () => void;
   readOnly?: boolean;
+  showGuestNames?: boolean;
 }
 
 export function FloorPlanCanvas({
@@ -37,6 +38,7 @@ export function FloorPlanCanvas({
   onCopySelected,
   onPasteSelected,
   readOnly = false,
+  showGuestNames = true,
 }: Props) {
   const {
     svgRef,
@@ -239,6 +241,7 @@ export function FloorPlanCanvas({
                 selectedSeat={selectedSeat}
                 onSeatClick={onSeatClick}
                 isSelected={selectedTableIds.includes(table.id)}
+                showGuestNames={showGuestNames}
               />
             </g>
           );

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { Table, Guest, TableType } from "@/lib/types";
+import { formatGuestNameCompact } from "@/lib/utils";
 
 const SEAT_R = 16;
 const SEAT_SPACING = 36;
@@ -43,6 +44,7 @@ interface Props {
   onSeatClick: (tableId: string, position: number) => void;
   isSelected: boolean;
   seatColorOverride?: Map<string, string>;
+  showGuestNames?: boolean;
 }
 
 export function TableRenderer({
@@ -52,14 +54,15 @@ export function TableRenderer({
   onSeatClick,
   isSelected,
   seatColorOverride,
+  showGuestNames = true,
 }: Props) {
   switch (table.tableType) {
     case "LINE":
-      return <LineTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride }} />;
+      return <LineTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames }} />;
     case "U_SHAPE":
-      return <UShapeTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride }} />;
+      return <UShapeTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames }} />;
     case "ROUND":
-      return <RoundTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride }} />;
+      return <RoundTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames }} />;
     default:
       return null;
   }
@@ -171,7 +174,7 @@ function LineTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, sea
       >
         {table.name}
       </text>
-      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride)}
+      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride, showGuestNames)}
     </>
   );
 }
@@ -308,7 +311,7 @@ function UShapeTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, s
         </text>
       </g>
 
-      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride)}
+      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride, showGuestNames)}
     </>
   );
 }
@@ -352,7 +355,7 @@ function RoundTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, se
       <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fill="#555" fontSize="13" fontWeight="500">
         {table.name}
       </text>
-      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride)}
+      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride, showGuestNames)}
     </>
   );
 }
@@ -365,7 +368,8 @@ function renderSeats(
   guestMap: Map<string, Guest>,
   selectedSeat: { tableId: string; position: number } | null,
   onSeatClick: (tableId: string, position: number) => void,
-  seatColorOverride?: Map<string, string>
+  seatColorOverride?: Map<string, string>,
+  showGuestNames = true
 ) {
   return seats.map((s) => {
     const guest = s.guestId ? guestMap.get(s.guestId) : null;
@@ -409,7 +413,7 @@ function renderSeats(
         >
           {seatNum}
         </text>
-        {guest && seatLabel(s, trunc(guest.name, 14))}
+        {guest && showGuestNames && seatLabel(s, trunc(formatGuestNameCompact(guest.name), 14))}
       </g>
     );
   });

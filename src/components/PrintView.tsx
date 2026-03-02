@@ -245,6 +245,19 @@ function AllergyMap({ tables, guests, labels }: { tables: Table[]; guests: Guest
     return [...set].sort();
   }, [allergicGuests]);
 
+  const allergyStats = useMemo(() => {
+    const stats = new Map<DietaryRestriction, Guest[]>();
+    for (const g of allergicGuests) {
+      for (const r of g.dietaryRestrictions) {
+        if (r !== DietaryRestriction.NONE) {
+          if (!stats.has(r)) stats.set(r, []);
+          stats.get(r)!.push(g);
+        }
+      }
+    }
+    return stats;
+  }, [allergicGuests]);
+
   const noopSeatClick = () => {};
 
   if (tables.length === 0)
@@ -282,6 +295,55 @@ function AllergyMap({ tables, guests, labels }: { tables: Table[]; guests: Guest
         {allergicGuests.length} guest{allergicGuests.length !== 1 ? "s" : ""} with dietary restrictions · {tables.length} tables
       </div>
 
+      {/* Allergy Summary Section */}
+      {allergyStats.size > 0 && (
+        <div
+          style={{
+            marginBottom: 20,
+            padding: "14px 16px",
+            border: "1px solid #e5e7eb",
+            borderRadius: 6,
+            backgroundColor: "#fafafa",
+            pageBreakInside: "avoid",
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: "#333" }}>
+            Dietary Restrictions Summary
+          </div>
+          {[...allergyStats.entries()]
+            .sort(([a], [b]) => DIETARY_RESTRICTION_LABELS[a].localeCompare(DIETARY_RESTRICTION_LABELS[b]))
+            .map(([restriction, guestList]) => {
+              const c = ALLERGY_COLORS[restriction];
+              return (
+                <div
+                  key={restriction}
+                  style={{
+                    marginBottom: 12,
+                    pageBreakInside: "avoid",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <span style={{
+                      width: 14, height: 14, borderRadius: "50%",
+                      backgroundColor: c?.bg ?? "#eee",
+                      border: `3px solid ${c?.border ?? "#ccc"}`,
+                      display: "inline-block",
+                      flexShrink: 0,
+                    }} />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "#333" }}>
+                      {DIETARY_RESTRICTION_LABELS[restriction]} ({guestList.length})
+                    </span>
+                  </div>
+                  <div style={{ marginLeft: 22, fontSize: 11, color: "#555", lineHeight: 1.5 }}>
+                    {guestList.map((g) => g.name).join(", ")}
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      )}
+
+      {/* Legend */}
       {activeRestrictions.length > 0 && (
         <div
           style={{
@@ -293,6 +355,7 @@ function AllergyMap({ tables, guests, labels }: { tables: Table[]; guests: Guest
             border: "1px solid #e5e7eb",
             borderRadius: 6,
             backgroundColor: "#fafafa",
+            pageBreakInside: "avoid",
           }}
         >
           <span style={{ fontSize: 12, fontWeight: 600, color: "#555", marginRight: 4 }}>Legend:</span>
@@ -313,30 +376,33 @@ function AllergyMap({ tables, guests, labels }: { tables: Table[]; guests: Guest
         </div>
       )}
 
-      <svg
-        viewBox={`${minX} ${minY} ${totalW} ${totalH}`}
-        overflow="visible"
-        style={{ width: "100%", height: "auto", aspectRatio: `${totalW} / ${totalH}` }}
-      >
-        {labels.map((l) => (
-          <g key={l.id} transform={`translate(${l.position.x},${l.position.y}) rotate(${l.rotation})`}>
-            <rect x={-l.width / 2} y={-l.height / 2} width={l.width} height={l.height} fill="white" stroke="#aaa" strokeWidth="1" rx="3" />
-            <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={l.fontSize} fill="#333" fontWeight="500">{l.text}</text>
-          </g>
-        ))}
-        {tables.map((table) => (
-          <g key={table.id} transform={`translate(${table.position.x},${table.position.y}) rotate(${table.rotation})`}>
-            <TableRenderer
-              table={table}
-              guestMap={allergyGuestMap}
-              selectedSeat={null}
-              onSeatClick={noopSeatClick}
-              isSelected={false}
-              seatColorOverride={seatColorOverride}
-            />
-          </g>
-        ))}
-      </svg>
+      {/* Floor Plan SVG */}
+      <div style={{ pageBreakInside: "avoid" }}>
+        <svg
+          viewBox={`${minX} ${minY} ${totalW} ${totalH}`}
+          overflow="visible"
+          style={{ width: "100%", height: "auto", aspectRatio: `${totalW} / ${totalH}` }}
+        >
+          {labels.map((l) => (
+            <g key={l.id} transform={`translate(${l.position.x},${l.position.y}) rotate(${l.rotation})`}>
+              <rect x={-l.width / 2} y={-l.height / 2} width={l.width} height={l.height} fill="white" stroke="#aaa" strokeWidth="1" rx="3" />
+              <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={l.fontSize} fill="#333" fontWeight="500">{l.text}</text>
+            </g>
+          ))}
+          {tables.map((table) => (
+            <g key={table.id} transform={`translate(${table.position.x},${table.position.y}) rotate(${table.rotation})`}>
+              <TableRenderer
+                table={table}
+                guestMap={allergyGuestMap}
+                selectedSeat={null}
+                onSeatClick={noopSeatClick}
+                isSelected={false}
+                seatColorOverride={seatColorOverride}
+              />
+            </g>
+          ))}
+        </svg>
+      </div>
     </div>
   );
 }
@@ -375,7 +441,7 @@ function AlphaLookup({
       <div
         style={{
           columnCount: columns,
-          columnGap: 24,
+          columnGap: 32,
           marginTop: 8,
         }}
       >
@@ -403,7 +469,7 @@ function AlphaLookup({
                     justifyContent: "space-between",
                     alignItems: "baseline",
                     fontSize,
-                    padding: `${pad}px 4px`,
+                    padding: `${pad}px 8px`,
                     borderBottom: "1px solid #f0f0f0",
                     lineHeight: 1.3,
                   }}
@@ -414,7 +480,7 @@ function AlphaLookup({
                       fontSize: tableFontSize,
                       color: table ? "#555" : "#bbb",
                       fontStyle: table ? "normal" : "italic",
-                      marginLeft: 8,
+                      marginLeft: 12,
                       whiteSpace: "nowrap",
                     }}
                   >
