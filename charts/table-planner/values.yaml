@@ -10,7 +10,7 @@ frontend:
 image:
   repository: ghcr.io/frallan97/table-planner
   pullPolicy: Always
-  tag: "latest"
+  tag: "main-717d317"
 
 imagePullSecrets:
   - name: ghcr-pull-secret
@@ -100,7 +100,7 @@ backend:
   image:
     repository: ghcr.io/frallan97/table-planner-backend
     pullPolicy: Always
-    tag: "latest"
+    tag: "main-323e8fc"
 
   service:
     port: 8082
