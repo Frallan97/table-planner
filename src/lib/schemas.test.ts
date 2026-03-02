@@ -2,11 +2,27 @@ import { describe, test, expect } from "bun:test";
 import { floorPlanSummarySchema, floorPlanFullSchema, tableSchema, guestSchema, floorLabelSchema } from "./schemas";
 
 describe("floorPlanSummarySchema", () => {
-  test("valid data passes", () => {
+  test("valid personal plan passes", () => {
     const data = {
       id: "550e8400-e29b-41d4-a716-446655440000",
       userId: "550e8400-e29b-41d4-a716-446655440001",
       name: "My Plan",
+      isPersonal: true,
+      createdAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-02T00:00:00Z",
+    };
+    const result = floorPlanSummarySchema.safeParse(data);
+    expect(result.success).toBe(true);
+  });
+
+  test("valid org plan passes", () => {
+    const data = {
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      userId: "550e8400-e29b-41d4-a716-446655440001",
+      name: "My Plan",
+      organizationId: "550e8400-e29b-41d4-a716-446655440002",
+      organizationName: "My Org",
+      isPersonal: false,
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-02T00:00:00Z",
     };
@@ -24,6 +40,7 @@ describe("floorPlanSummarySchema", () => {
       id: "not-a-uuid",
       userId: "550e8400-e29b-41d4-a716-446655440001",
       name: "My Plan",
+      isPersonal: true,
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-02T00:00:00Z",
     };
@@ -114,6 +131,7 @@ describe("floorPlanFullSchema", () => {
       id: "550e8400-e29b-41d4-a716-446655440000",
       userId: "550e8400-e29b-41d4-a716-446655440001",
       name: "Reception",
+      isPersonal: true,
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-02T00:00:00Z",
       tables: [],
