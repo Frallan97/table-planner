@@ -20,6 +20,7 @@ import (
 type contextKey string
 
 const UserIDKey contextKey = "userID"
+const UserClaimsKey contextKey = "userClaims"
 
 type Claims struct {
 	UserID uuid.UUID `json:"sub"`
@@ -159,6 +160,7 @@ func (am *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		}
 
 		ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
+		ctx = context.WithValue(ctx, UserClaimsKey, claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -166,4 +168,9 @@ func (am *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 func GetUserID(ctx context.Context) (uuid.UUID, bool) {
 	id, ok := ctx.Value(UserIDKey).(uuid.UUID)
 	return id, ok
+}
+
+func GetUserClaims(ctx context.Context) (*Claims, bool) {
+	claims, ok := ctx.Value(UserClaimsKey).(*Claims)
+	return claims, ok
 }

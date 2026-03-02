@@ -70,7 +70,7 @@ export function TableRenderer({
 
 // ─── LINE TABLE ──────────────────────────────────────────────────────
 
-function LineTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride }: Props) {
+function LineTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames }: Props) {
   const endLeft = table.endSeatLeft ?? false;
   const endRight = table.endSeatRight ?? false;
   const endCount = (endLeft ? 1 : 0) + (endRight ? 1 : 0);
@@ -181,7 +181,7 @@ function LineTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, sea
 
 // ─── U-SHAPE TABLE ───────────────────────────────────────────────────
 
-function UShapeTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride }: Props) {
+function UShapeTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames }: Props) {
   const { topSeats: nTop, leftSeats: nLeft, rightSeats: nRight } = table;
 
   const layout = useMemo(() => {
@@ -318,7 +318,7 @@ function UShapeTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, s
 
 // ─── ROUND TABLE ─────────────────────────────────────────────────────
 
-function RoundTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride }: Props) {
+function RoundTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames }: Props) {
   const n = table.seats.length;
   const R = Math.max(35, n * 7);
 
