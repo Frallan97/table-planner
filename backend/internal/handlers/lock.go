@@ -60,24 +60,35 @@ func (h *Handler) AcquireLock(w http.ResponseWriter, r *http.Request) {
 	// Acquire or refresh lock
 	expiresAt := time.Now().Add(lockDuration)
 	query := `
-		INSERT INTO floor_plan_locks (floor_plan_id, user_id, locked_at, expires_at)
-		VALUES ($1, $2, NOW(), $3)
-		ON CONFLICT (floor_plan_id)
-		DO UPDATE SET locked_at = NOW(), expires_at = $3
-		WHERE floor_plan_locks.user_id = $2
-		RETURNING floor_plan_id, user_id, locked_at, expires_at
+		WITH lock_insert AS (
+			INSERT INTO floor_plan_locks (floor_plan_id, user_id, locked_at, expires_at)
+			VALUES ($1, $2, NOW(), $3)
+			ON CONFLICT (floor_plan_id)
+			DO UPDATE SET locked_at = NOW(), expires_at = $3
+			WHERE floor_plan_locks.user_id = $2
+			RETURNING floor_plan_id, user_id, locked_at, expires_at
+		)
+		SELECT li.floor_plan_id, li.user_id, u.email, li.locked_at, li.expires_at
+		FROM lock_insert li
+		LEFT JOIN users u ON li.user_id = u.id
 	`
 
 	var lock models.FloorPlanLock
+	var userEmail sql.NullString
 	err = h.pool.QueryRow(r.Context(), query, fpID, userID, expiresAt).Scan(
 		&lock.FloorPlanID,
 		&lock.UserID,
+		&userEmail,
 		&lock.LockedAt,
 		&lock.ExpiresAt,
 	)
 	if err != nil {
 		http.Error(w, `{"error":"failed to acquire lock"}`, http.StatusInternalServerError)
 		return
+	}
+
+	if userEmail.Valid {
+		lock.UserEmail = userEmail.String
 	}
 
 	respondJSON(w, http.StatusOK, lock)
@@ -130,16 +141,23 @@ func (h *Handler) RefreshLock(w http.ResponseWriter, r *http.Request) {
 	// Update expiry only if user owns the lock
 	expiresAt := time.Now().Add(lockDuration)
 	query := `
-		UPDATE floor_plan_locks
-		SET expires_at = $1, locked_at = NOW()
-		WHERE floor_plan_id = $2 AND user_id = $3
-		RETURNING floor_plan_id, user_id, locked_at, expires_at
+		WITH lock_update AS (
+			UPDATE floor_plan_locks
+			SET expires_at = $1, locked_at = NOW()
+			WHERE floor_plan_id = $2 AND user_id = $3
+			RETURNING floor_plan_id, user_id, locked_at, expires_at
+		)
+		SELECT lu.floor_plan_id, lu.user_id, u.email, lu.locked_at, lu.expires_at
+		FROM lock_update lu
+		LEFT JOIN users u ON lu.user_id = u.id
 	`
 
 	var lock models.FloorPlanLock
+	var userEmail sql.NullString
 	err = h.pool.QueryRow(r.Context(), query, expiresAt, fpID, userID).Scan(
 		&lock.FloorPlanID,
 		&lock.UserID,
+		&userEmail,
 		&lock.LockedAt,
 		&lock.ExpiresAt,
 	)
@@ -150,6 +168,10 @@ func (h *Handler) RefreshLock(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, `{"error":"database error"}`, http.StatusInternalServerError)
 		return
+	}
+
+	if userEmail.Valid {
+		lock.UserEmail = userEmail.String
 	}
 
 	respondJSON(w, http.StatusOK, lock)
@@ -204,14 +226,16 @@ func (h *Handler) getLockStatusImpl(fpID uuid.UUID) (*models.FloorPlanLock, erro
 	var userEmail sql.NullString
 
 	query := `
-		SELECT fpl.floor_plan_id, fpl.user_id, fpl.locked_at, fpl.expires_at
+		SELECT fpl.floor_plan_id, fpl.user_id, u.email, fpl.locked_at, fpl.expires_at
 		FROM floor_plan_locks fpl
+		LEFT JOIN users u ON fpl.user_id = u.id
 		WHERE fpl.floor_plan_id = $1 AND fpl.expires_at > NOW()
 	`
 
 	err := h.pool.QueryRow(context.Background(), query, fpID).Scan(
 		&lock.FloorPlanID,
 		&lock.UserID,
+		&userEmail,
 		&lock.LockedAt,
 		&lock.ExpiresAt,
 	)
