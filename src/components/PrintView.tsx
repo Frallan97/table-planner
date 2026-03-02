@@ -26,12 +26,13 @@ export function PrintView() {
     if (!el) return;
     const win = window.open("", "_blank");
     if (!win) return;
+    const marginStyle = format === "allergy-map" ? "@page { margin: 2cm; }" : "@page { margin: 0; }";
     win.document.write(`<!DOCTYPE html><html><head>
       <title>Table Planner — Print</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 0; color: #111; }
-        @page { margin: 0; }
+        ${marginStyle}
         @media print { body { padding: 0; } }
       </style>
     </head><body>${el.innerHTML}</body></html>`);
@@ -177,7 +178,10 @@ export function PrintView() {
             <div
               ref={printRef}
               className="bg-white rounded border p-6 min-h-[400px]"
-              style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}
+              style={{
+                fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                ...(format === "allergy-map" ? { padding: "2cm" } : {})
+              }}
             >
               {format === "floor-plan" && (
                 <FloorPlanPrint tables={tables} guests={guests} labels={labels} pages={floorPlanPages} />
