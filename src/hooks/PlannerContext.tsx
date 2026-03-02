@@ -24,6 +24,8 @@ interface FloorPlanState {
   setCurrentFloorPlan: (id: string | null, name?: string | null) => void;
   isSaving: boolean;
   lastSaved: Date | null;
+  hasConflict: boolean;
+  resolveConflict: () => void;
 }
 
 interface PlannerContextValue {
@@ -48,6 +50,8 @@ export function PlannerProvider({ children }: { children: React.ReactNode }) {
   const [currentFloorPlanName, setCurrentFloorPlanName] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [version, setVersion] = useState<number | null>(null);
+  const [hasConflict, setHasConflict] = useState(false);
 
   const undoStackRef = useRef<Snapshot[]>([]);
   const isUndoingRef = useRef(false);
@@ -111,6 +115,8 @@ export function PlannerProvider({ children }: { children: React.ReactNode }) {
       tablesHook.setTables((data.tables || []) as Table[]);
       guestsHook.setGuests((data.guests || []) as Guest[]);
       labelsHook.setLabels((data.labels || []) as FloorLabel[]);
+      setVersion(data.version);
+      setHasConflict(false);
       undoStackRef.current = [];
       prevStateRef.current = null;
     } catch (err) {
@@ -134,6 +140,8 @@ export function PlannerProvider({ children }: { children: React.ReactNode }) {
       tablesHook.setTables([]);
       guestsHook.setGuests([]);
       labelsHook.setLabels([]);
+      setVersion(null);
+      setHasConflict(false);
       undoStackRef.current = [];
       prevStateRef.current = null;
     }
@@ -144,7 +152,7 @@ export function PlannerProvider({ children }: { children: React.ReactNode }) {
   const lastSavedDataRef = useRef<string>("");
 
   useEffect(() => {
-    if (!isAuthenticated || !currentFloorPlanId || isLoadingRef.current) return;
+    if (!isAuthenticated || !currentFloorPlanId || isLoadingRef.current || hasConflict || version === null) return;
 
     const dataStr = JSON.stringify({ tables: curTables, guests: curGuests, labels: curLabels });
 
@@ -158,13 +166,21 @@ export function PlannerProvider({ children }: { children: React.ReactNode }) {
     saveTimerRef.current = setTimeout(async () => {
       setIsSaving(true);
       try {
-        await api.bulkSave(currentFloorPlanId, {
+        const result = await api.bulkSave(currentFloorPlanId, {
+          version,
           tables: curTables,
           guests: curGuests,
           labels: curLabels,
         });
-        lastSavedDataRef.current = dataStr;
-        setLastSaved(new Date());
+        if (result.status === "conflict") {
+          setHasConflict(true);
+        } else {
+          if (result.version !== undefined) {
+            setVersion(result.version);
+          }
+          lastSavedDataRef.current = dataStr;
+          setLastSaved(new Date());
+        }
       } catch (err) {
         console.error("Failed to auto-save:", err);
       } finally {
@@ -177,7 +193,14 @@ export function PlannerProvider({ children }: { children: React.ReactNode }) {
         clearTimeout(saveTimerRef.current);
       }
     };
-  }, [curTables, curGuests, curLabels, currentFloorPlanId, isAuthenticated]);
+  }, [curTables, curGuests, curLabels, currentFloorPlanId, isAuthenticated, hasConflict, version]);
+
+  const resolveConflict = useCallback(() => {
+    if (currentFloorPlanId) {
+      lastSavedDataRef.current = "";
+      loadFloorPlan(currentFloorPlanId);
+    }
+  }, [currentFloorPlanId, loadFloorPlan]);
 
   const floorPlanState: FloorPlanState = {
     currentFloorPlanId,
@@ -185,6 +208,8 @@ export function PlannerProvider({ children }: { children: React.ReactNode }) {
     setCurrentFloorPlan,
     isSaving,
     lastSaved,
+    hasConflict,
+    resolveConflict,
   };
 
   return (

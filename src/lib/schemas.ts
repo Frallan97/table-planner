@@ -4,6 +4,7 @@ export const floorPlanSummarySchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
   name: z.string(),
+  version: z.number(),
   organizationId: z.string().uuid().optional().nullable(),
   organizationName: z.string().optional().nullable(),
   isPersonal: z.boolean(),

@@ -134,6 +134,7 @@ export interface FloorPlanFull {
   id: string;
   userId: string;
   name: string;
+  version: number;
   organizationId?: string;
   organizationName?: string;
   createdAt: string;
@@ -141,7 +142,7 @@ export interface FloorPlanFull {
   tables: unknown[];
   guests: unknown[];
   labels: unknown[];
-  lock?: FloorPlanLock;
+  presence: FloorPlanPresence[];
 }
 
 export interface Organization {
@@ -175,12 +176,20 @@ export interface OrganizationInvitation {
   expiresAt: string;
 }
 
-export interface FloorPlanLock {
+export interface FloorPlanPresence {
   floorPlanId: string;
   userId: string;
-  userEmail?: string;
-  lockedAt: string;
-  expiresAt: string;
+  userEmail: string;
+  lastSeenAt: string;
+}
+
+export interface BulkSaveResult {
+  status: string;
+  version?: number;
+  tables?: unknown[];
+  guests?: unknown[];
+  labels?: unknown[];
+  error?: string;
 }
 
 function validateResponse<T>(schema: ZodSchema<T>, data: unknown): T {
@@ -223,11 +232,50 @@ export const api = {
     });
   },
 
-  bulkSave(id: string, data: { tables: unknown[]; guests: unknown[]; labels: unknown[] }): Promise<void> {
-    return request(`/api/floor-plans/${id}/save`, {
+  async bulkSave(id: string, data: { version: number; tables: unknown[]; guests: unknown[]; labels: unknown[] }): Promise<BulkSaveResult> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (accessToken) {
+      headers["Authorization"] = `Bearer ${accessToken}`;
+    }
+
+    const response = await fetch(`${API_BASE}/api/floor-plans/${id}/save`, {
       method: "PUT",
+      headers,
       body: JSON.stringify(data),
     });
+
+    if (response.status === 409) {
+      const body = await response.json();
+      return { status: "conflict", ...body };
+    }
+
+    if (response.status === 401) {
+      const refreshed = await tryRefreshToken();
+      if (refreshed) {
+        headers["Authorization"] = `Bearer ${accessToken}`;
+        const retry = await fetch(`${API_BASE}/api/floor-plans/${id}/save`, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify(data),
+        });
+        if (retry.status === 409) {
+          const body = await retry.json();
+          return { status: "conflict", ...body };
+        }
+        if (retry.ok) return retry.json();
+      }
+      onUnauthorized?.();
+      throw new Error("Unauthorized");
+    }
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`API error ${response.status}: ${body}`);
+    }
+
+    return response.json();
   },
 
   // Share/Unshare
@@ -244,27 +292,15 @@ export const api = {
     });
   },
 
-  // Floor Plan Locking
-  acquireLock(fpId: string): Promise<FloorPlanLock> {
-    return request(`/api/floor-plans/${fpId}/lock`, {
+  // Presence
+  sendPresenceHeartbeat(fpId: string): Promise<FloorPlanPresence[]> {
+    return request(`/api/floor-plans/${fpId}/presence`, {
       method: "POST",
     });
   },
 
-  releaseLock(fpId: string): Promise<void> {
-    return request(`/api/floor-plans/${fpId}/lock`, {
-      method: "DELETE",
-    });
-  },
-
-  refreshLockHeartbeat(fpId: string): Promise<FloorPlanLock> {
-    return request(`/api/floor-plans/${fpId}/lock/heartbeat`, {
-      method: "PUT",
-    });
-  },
-
-  getLockStatus(fpId: string): Promise<{ locked: boolean; lock?: FloorPlanLock }> {
-    return request(`/api/floor-plans/${fpId}/lock/status`);
+  getPresence(fpId: string): Promise<FloorPlanPresence[]> {
+    return request(`/api/floor-plans/${fpId}/presence`);
   },
 
   // Organizations

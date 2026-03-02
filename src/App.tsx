@@ -6,10 +6,11 @@ import { GuestManager } from "./components/GuestManager";
 import { PrintView } from "./components/PrintView";
 import { FloorPlanPicker } from "./components/FloorPlanPicker";
 import { ShareControl } from "./components/ShareControl";
-import { LockBanner } from "./components/LockBanner";
+import { ConflictBanner } from "./components/ConflictBanner";
+import { PresenceBanner } from "./components/PresenceBanner";
 import { useAuth } from "./hooks/useAuth";
 import { usePlannerFloorPlan } from "./hooks/PlannerContext";
-import { useFloorPlanLock } from "./hooks/useFloorPlanLock";
+import { useFloorPlanPresence } from "./hooks/useFloorPlanPresence";
 import { api, type FloorPlanFull } from "./lib/api";
 import type { SelectedItem } from "./lib/types";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -19,11 +20,11 @@ type Tab = "floorplan" | "guests" | "print";
 
 export function App() {
   const { user, isAuthenticated, isLoading, login, logout } = useAuth();
-  const { currentFloorPlanId, currentFloorPlanName, setCurrentFloorPlan, isSaving, lastSaved } = usePlannerFloorPlan();
+  const { currentFloorPlanId, currentFloorPlanName, setCurrentFloorPlan, isSaving, lastSaved, hasConflict, resolveConflict } = usePlannerFloorPlan();
   const [activeTab, setActiveTab] = useState<Tab>("floorplan");
   const [selectedItem, setSelectedItem] = useState<SelectedItem>(null);
   const [floorPlanDetails, setFloorPlanDetails] = useState<FloorPlanFull | null>(null);
-  const { lockStatus, isLocked, acquireLock } = useFloorPlanLock(currentFloorPlanId);
+  const { otherEditors } = useFloorPlanPresence(currentFloorPlanId);
 
   // Fetch floor plan details when floor plan changes
   useEffect(() => {
@@ -35,13 +36,6 @@ export function App() {
       setFloorPlanDetails(null);
     }
   }, [currentFloorPlanId]);
-
-  // Try to acquire lock when floor plan opens (if not locked by another user)
-  useEffect(() => {
-    if (currentFloorPlanId && !isLocked) {
-      acquireLock();
-    }
-  }, [currentFloorPlanId, isLocked, acquireLock]);
 
   if (isLoading) {
     return (
@@ -171,9 +165,14 @@ export function App() {
         </div>
 
         <div style={{ height: "calc(100vh - 120px)" }}>
-          {/* Lock Banner */}
-          {isLocked && lockStatus && (
-            <LockBanner lock={lockStatus} />
+          {/* Conflict Banner */}
+          {hasConflict && (
+            <ConflictBanner onReload={resolveConflict} />
+          )}
+
+          {/* Presence Banner */}
+          {!hasConflict && otherEditors.length > 0 && (
+            <PresenceBanner editors={otherEditors} />
           )}
 
           {activeTab === "floorplan" && (

@@ -61,6 +61,31 @@ func (h *Handler) BulkSave(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(r.Context())
 
+	// Optimistic concurrency: check version under row lock
+	var dbVersion int
+	err = tx.QueryRow(r.Context(),
+		`SELECT version FROM floor_plans WHERE id = $1 FOR UPDATE`, fpID,
+	).Scan(&dbVersion)
+	if err != nil {
+		http.Error(w, `{"error":"floor plan not found"}`, http.StatusNotFound)
+		return
+	}
+
+	if req.Version != dbVersion {
+		// Version conflict — return current data so the client can reconcile
+		tables, _ := h.getEntityData(r.Context(), "floor_plan_tables", fpID)
+		guests, _ := h.getEntityData(r.Context(), "floor_plan_guests", fpID)
+		labels, _ := h.getEntityData(r.Context(), "floor_plan_labels", fpID)
+		respondJSON(w, http.StatusConflict, map[string]any{
+			"error":   "version conflict",
+			"version": dbVersion,
+			"tables":  tables,
+			"guests":  guests,
+			"labels":  labels,
+		})
+		return
+	}
+
 	// Upsert each entity type
 	if err := upsertEntities(r.Context(), tx, "floor_plan_tables", fpID, req.Tables); err != nil {
 		http.Error(w, `{"error":"failed to save tables"}`, http.StatusInternalServerError)
@@ -75,10 +100,12 @@ func (h *Handler) BulkSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update the floor plan timestamp
-	if _, err := tx.Exec(r.Context(),
-		`UPDATE floor_plans SET updated_at = NOW() WHERE id = $1`, fpID,
-	); err != nil {
+	// Update timestamp and increment version
+	var newVersion int
+	err = tx.QueryRow(r.Context(),
+		`UPDATE floor_plans SET updated_at = NOW(), version = version + 1 WHERE id = $1 RETURNING version`, fpID,
+	).Scan(&newVersion)
+	if err != nil {
 		http.Error(w, `{"error":"database error"}`, http.StatusInternalServerError)
 		return
 	}
@@ -88,7 +115,7 @@ func (h *Handler) BulkSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+	writeJSON(w, http.StatusOK, models.BulkSaveResponse{Status: "saved", Version: newVersion})
 }
 
 // upsertEntities deletes rows not in the incoming set, then upserts the rest.

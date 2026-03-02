@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -21,7 +20,7 @@ func (h *Handler) ListFloorPlans(w http.ResponseWriter, r *http.Request) {
 
 	// Get personal plans + plans from orgs the user is a member of
 	query := `
-		SELECT fp.id, fp.user_id, fp.name, fp.organization_id, fp.created_at, fp.updated_at,
+		SELECT fp.id, fp.user_id, fp.name, fp.version, fp.organization_id, fp.created_at, fp.updated_at,
 		       o.name as organization_name,
 		       CASE WHEN fp.organization_id IS NULL THEN true ELSE false END as is_personal
 		FROM floor_plans fp
@@ -44,7 +43,7 @@ func (h *Handler) ListFloorPlans(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var fp models.FloorPlanWithOrg
 		var orgName *string
-		if err := rows.Scan(&fp.ID, &fp.UserID, &fp.Name, &fp.OrganizationID, &fp.CreatedAt, &fp.UpdatedAt, &orgName, &fp.IsPersonal); err != nil {
+		if err := rows.Scan(&fp.ID, &fp.UserID, &fp.Name, &fp.Version, &fp.OrganizationID, &fp.CreatedAt, &fp.UpdatedAt, &orgName, &fp.IsPersonal); err != nil {
 			http.Error(w, `{"error":"scan error"}`, http.StatusInternalServerError)
 			return
 		}
@@ -123,12 +122,12 @@ func (h *Handler) GetFloorPlan(w http.ResponseWriter, r *http.Request) {
 	var fp models.FloorPlan
 	var orgName *string
 	err = h.pool.QueryRow(r.Context(),
-		`SELECT fp.id, fp.user_id, fp.name, fp.organization_id, fp.created_at, fp.updated_at, o.name
+		`SELECT fp.id, fp.user_id, fp.name, fp.version, fp.organization_id, fp.created_at, fp.updated_at, o.name
 		 FROM floor_plans fp
 		 LEFT JOIN organizations o ON fp.organization_id = o.id
 		 WHERE fp.id = $1`,
 		fpID,
-	).Scan(&fp.ID, &fp.UserID, &fp.Name, &fp.OrganizationID, &fp.CreatedAt, &fp.UpdatedAt, &orgName)
+	).Scan(&fp.ID, &fp.UserID, &fp.Name, &fp.Version, &fp.OrganizationID, &fp.CreatedAt, &fp.UpdatedAt, &orgName)
 	if err != nil {
 		http.Error(w, `{"error":"floor plan not found"}`, http.StatusNotFound)
 		return
@@ -152,8 +151,8 @@ func (h *Handler) GetFloorPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check lock status
-	lock, err := h.getLockStatus(r.Context(), fpID)
+	// Get presence info (other active editors)
+	presence, err := h.getActivePresence(r.Context(), fpID, userID)
 	if err != nil {
 		http.Error(w, `{"error":"database error"}`, http.StatusInternalServerError)
 		return
@@ -164,7 +163,7 @@ func (h *Handler) GetFloorPlan(w http.ResponseWriter, r *http.Request) {
 		Tables:           tables,
 		Guests:           guests,
 		Labels:           labels,
-		Lock:             lock,
+		Presence:         presence,
 		OrganizationName: orgName,
 	}
 
@@ -297,7 +296,3 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	json.NewEncoder(w).Encode(v)
 }
 
-// getLockStatus returns the lock status for a floor plan
-func (h *Handler) getLockStatus(ctx context.Context, fpID uuid.UUID) (*models.FloorPlanLock, error) {
-	return h.getLockStatusImpl(fpID)
-}

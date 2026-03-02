@@ -24,26 +24,26 @@ type FloorPlan struct {
 	ID             uuid.UUID  `json:"id"`
 	UserID         uuid.UUID  `json:"userId"`
 	Name           string     `json:"name"`
+	Version        int        `json:"version"`
 	OrganizationID *uuid.UUID `json:"organizationId,omitempty"`
 	CreatedAt      time.Time  `json:"createdAt"`
 	UpdatedAt      time.Time  `json:"updatedAt"`
 }
 
-type FloorPlanLock struct {
+type FloorPlanPresence struct {
 	FloorPlanID uuid.UUID `json:"floorPlanId"`
 	UserID      uuid.UUID `json:"userId"`
-	UserEmail   string    `json:"userEmail,omitempty"`
-	LockedAt    time.Time `json:"lockedAt"`
-	ExpiresAt   time.Time `json:"expiresAt"`
+	UserEmail   string    `json:"userEmail"`
+	LastSeenAt  time.Time `json:"lastSeenAt"`
 }
 
 type FloorPlanFull struct {
 	FloorPlan
-	Tables         []json.RawMessage `json:"tables"`
-	Guests         []json.RawMessage `json:"guests"`
-	Labels         []json.RawMessage `json:"labels"`
-	Lock           *FloorPlanLock    `json:"lock,omitempty"`
-	OrganizationName *string         `json:"organizationName,omitempty"`
+	Tables           []json.RawMessage   `json:"tables"`
+	Guests           []json.RawMessage   `json:"guests"`
+	Labels           []json.RawMessage   `json:"labels"`
+	Presence         []FloorPlanPresence `json:"presence"`
+	OrganizationName *string             `json:"organizationName,omitempty"`
 }
 
 type FloorPlanWithOrg struct {
@@ -78,9 +78,15 @@ func (r *UpdateFloorPlanRequest) Validate() error {
 }
 
 type BulkSaveRequest struct {
-	Tables []json.RawMessage `json:"tables"`
-	Guests []json.RawMessage `json:"guests"`
-	Labels []json.RawMessage `json:"labels"`
+	Version int               `json:"version"`
+	Tables  []json.RawMessage `json:"tables"`
+	Guests  []json.RawMessage `json:"guests"`
+	Labels  []json.RawMessage `json:"labels"`
+}
+
+type BulkSaveResponse struct {
+	Status  string `json:"status"`
+	Version int    `json:"version"`
 }
 
 const maxBulkItems = 500

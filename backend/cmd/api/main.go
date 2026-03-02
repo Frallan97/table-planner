@@ -75,11 +75,9 @@ func main() {
 			r.Post("/{id}/share", h.ShareFloorPlan)
 			r.Post("/{id}/unshare", h.UnshareFloorPlan)
 
-			// Lock endpoints
-			r.Post("/{id}/lock", h.AcquireLock)
-			r.Delete("/{id}/lock", h.ReleaseLock)
-			r.Put("/{id}/lock/heartbeat", h.RefreshLock)
-			r.Get("/{id}/lock/status", h.GetLockStatusHandler)
+			// Presence endpoints
+			r.Post("/{id}/presence", h.SendPresenceHeartbeat)
+			r.Get("/{id}/presence", h.GetPresence)
 		})
 
 		r.Route("/organizations", func(r chi.Router) {
