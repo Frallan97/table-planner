@@ -10,7 +10,7 @@ frontend:
 image:
   repository: ghcr.io/frallan97/table-planner
   pullPolicy: Always
-  tag: "main-3cc1cab"
+  tag: "main-d702a47"
 
 imagePullSecrets:
   - name: ghcr-pull-secret
