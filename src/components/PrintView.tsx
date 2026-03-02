@@ -1,25 +1,39 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { usePlannerGuests as useGuests, usePlannerTables as useTables, usePlannerLabels as useLabels } from "@/hooks/PlannerContext";
+import { usePlannerGuests as useGuests, usePlannerTables as useTables, usePlannerLabels as useLabels, usePlannerFloorPlan } from "@/hooks/PlannerContext";
 import { DietaryRestriction, DIETARY_RESTRICTION_LABELS } from "@/lib/types";
 import type { Table, Guest, FloorLabel } from "@/lib/types";
 import { Label } from "@/components/ui/label";
-import { Printer, MapPin, ShieldAlert, BookA } from "lucide-react";
+import { Printer, MapPin, ShieldAlert, BookA, QrCode } from "lucide-react";
 import { TableRenderer } from "./TableRenderer";
+import { QRCodeSVG } from "qrcode.react";
+import { api } from "@/lib/api";
 
-type Format = "floor-plan" | "allergy-map" | "alpha-lookup";
+type Format = "floor-plan" | "allergy-map" | "alpha-lookup" | "qr-share";
 
 export function PrintView() {
   const { guests } = useGuests();
   const { tables } = useTables();
   const { labels } = useLabels();
+  const { currentFloorPlanId, currentFloorPlanName } = usePlannerFloorPlan();
   const [format, setFormat] = useState<Format>("floor-plan");
   const printRef = useRef<HTMLDivElement>(null);
 
   const [lookupFontSize, setLookupFontSize] = useState(12);
   const [lookupColumns, setLookupColumns] = useState(1);
   const [floorPlanPages, setFloorPlanPages] = useState<1 | 2 | 4>(1);
+
+  // Fetch share token once on mount for embedding QR in all formats
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!currentFloorPlanId) return;
+    api.getShareToken(currentFloorPlanId).then((res) => {
+      if (res.token) {
+        setShareUrl(`${window.location.origin}/share/${res.token}`);
+      }
+    }).catch(() => {});
+  }, [currentFloorPlanId]);
 
   const handlePrint = () => {
     const el = printRef.current;
@@ -49,6 +63,7 @@ export function PrintView() {
     { id: "floor-plan", label: "Floor Plan", icon: <MapPin className="w-4 h-4" /> },
     { id: "allergy-map", label: "Allergy Map", icon: <ShieldAlert className="w-4 h-4" /> },
     { id: "alpha-lookup", label: "Name Lookup", icon: <BookA className="w-4 h-4" /> },
+    { id: "qr-share", label: "QR Share", icon: <QrCode className="w-4 h-4" /> },
   ];
 
   return (
@@ -184,10 +199,10 @@ export function PrintView() {
               }}
             >
               {format === "floor-plan" && (
-                <FloorPlanPrint tables={tables} guests={guests} labels={labels} pages={floorPlanPages} />
+                <FloorPlanPrint tables={tables} guests={guests} labels={labels} pages={floorPlanPages} shareUrl={shareUrl} />
               )}
               {format === "allergy-map" && (
-                <AllergyMap tables={tables} guests={guests} labels={labels} />
+                <AllergyMap tables={tables} guests={guests} labels={labels} shareUrl={shareUrl} />
               )}
               {format === "alpha-lookup" && (
                 <AlphaLookup
@@ -195,6 +210,13 @@ export function PrintView() {
                   tables={tables}
                   fontSize={lookupFontSize}
                   columns={lookupColumns}
+                  shareUrl={shareUrl}
+                />
+              )}
+              {format === "qr-share" && (
+                <QRSharePrint
+                  floorPlanId={currentFloorPlanId}
+                  floorPlanName={currentFloorPlanName}
                 />
               )}
             </div>
@@ -210,6 +232,96 @@ const S = {
   summary: { fontSize: 12, color: "#666", marginBottom: 16 } as const,
 };
 
+// ─── Embedded QR badge (small, for corner/title placement) ──────────
+function EmbeddedQR({ url }: { url: string }) {
+  return (
+    <div style={{ display: "inline-block", textAlign: "center" }}>
+      <QRCodeSVG value={url} size={80} level="M" />
+      <div style={{ fontSize: 7, color: "#999", marginTop: 2, maxWidth: 80, wordBreak: "break-all" }}>
+        Scan to view
+      </div>
+    </div>
+  );
+}
+
+// ─── QR SHARE (standalone page) ─────────────────────────────────────
+function QRSharePrint({
+  floorPlanId,
+  floorPlanName,
+}: {
+  floorPlanId: string | null;
+  floorPlanName: string | null;
+}) {
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!floorPlanId) {
+      setLoading(false);
+      return;
+    }
+
+    async function fetchOrCreate() {
+      try {
+        // Try to get existing token first
+        const existing = await api.getShareToken(floorPlanId!);
+        if (existing.token) {
+          setShareUrl(`${window.location.origin}/share/${existing.token}`);
+        } else {
+          // Create new token
+          const created = await api.createShareToken(floorPlanId!);
+          setShareUrl(`${window.location.origin}/share/${created.token}`);
+        }
+      } catch (err) {
+        setError("Failed to create share link. You must be the floor plan creator.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchOrCreate();
+  }, [floorPlanId]);
+
+  if (loading) {
+    return <p style={{ color: "#999", textAlign: "center", paddingTop: 40 }}>Generating share link...</p>;
+  }
+
+  if (error || !shareUrl) {
+    return (
+      <div style={{ textAlign: "center", paddingTop: 40 }}>
+        <p style={{ color: "#999", fontSize: 14 }}>
+          {error || "Unable to generate share link."}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ textAlign: "center", padding: "40px 20px" }}>
+      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>
+        {floorPlanName || "Floor Plan"}
+      </h1>
+      <p style={{ fontSize: 14, color: "#666", marginBottom: 32 }}>
+        Scan to view the seating arrangement
+      </p>
+      <div style={{ display: "inline-block" }}>
+        <QRCodeSVG value={shareUrl} size={300} level="H" />
+      </div>
+      <p style={{
+        fontSize: 11,
+        color: "#888",
+        marginTop: 24,
+        wordBreak: "break-all",
+        maxWidth: 400,
+        margin: "24px auto 0",
+      }}>
+        {shareUrl}
+      </p>
+    </div>
+  );
+}
+
 const ALLERGY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   [DietaryRestriction.VEGETARIAN]: { bg: "#dcfce7", text: "#166534", border: "#22c55e" },
   [DietaryRestriction.VEGAN]: { bg: "#bbf7d0", text: "#14532d", border: "#16a34a" },
@@ -217,7 +329,7 @@ const ALLERGY_COLORS: Record<string, { bg: string; text: string; border: string 
   [DietaryRestriction.LACTOSE_INTOLERANT]: { bg: "#fef9c3", text: "#854d0e", border: "#eab308" },
 };
 
-function AllergyMap({ tables, guests, labels }: { tables: Table[]; guests: Guest[]; labels: FloorLabel[] }) {
+function AllergyMap({ tables, guests, labels, shareUrl }: { tables: Table[]; guests: Guest[]; labels: FloorLabel[]; shareUrl?: string | null }) {
   const allergicGuests = useMemo(
     () => guests.filter((g) => g.dietaryRestrictions?.length > 0 && !g.dietaryRestrictions.includes(DietaryRestriction.NONE)),
     [guests]
@@ -294,9 +406,14 @@ function AllergyMap({ tables, guests, labels }: { tables: Table[]; guests: Guest
 
   return (
     <div>
-      <h1 style={S.h1}>Allergy Map</h1>
-      <div style={S.summary}>
-        {allergicGuests.length} guest{allergicGuests.length !== 1 ? "s" : ""} with dietary restrictions · {tables.length} tables
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <h1 style={S.h1}>Allergy Map</h1>
+          <div style={S.summary}>
+            {allergicGuests.length} guest{allergicGuests.length !== 1 ? "s" : ""} with dietary restrictions · {tables.length} tables
+          </div>
+        </div>
+        {shareUrl && <EmbeddedQR url={shareUrl} />}
       </div>
 
       {/* Allergy Summary Section */}
@@ -416,11 +533,13 @@ function AlphaLookup({
   tables,
   fontSize,
   columns,
+  shareUrl,
 }: {
   guests: Guest[];
   tables: Table[];
   fontSize: number;
   columns: number;
+  shareUrl?: string | null;
 }) {
   const tableMap = new Map(tables.map((t) => [t.id, t]));
 
@@ -438,9 +557,14 @@ function AlphaLookup({
 
   return (
     <div>
-      <h1 style={S.h1}>Name Lookup</h1>
-      <div style={S.summary}>
-        {guests.length} guest{guests.length !== 1 ? "s" : ""} · sorted by first name
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <h1 style={S.h1}>Name Lookup</h1>
+          <div style={S.summary}>
+            {guests.length} guest{guests.length !== 1 ? "s" : ""} · sorted by first name
+          </div>
+        </div>
+        {shareUrl && <EmbeddedQR url={shareUrl} />}
       </div>
       <div
         style={{
@@ -509,11 +633,13 @@ function FloorPlanPrint({
   guests,
   labels,
   pages,
+  shareUrl,
 }: {
   tables: Table[];
   guests: Guest[];
   labels: FloorLabel[];
   pages: 1 | 2 | 4;
+  shareUrl?: string | null;
 }) {
   const guestMap = useMemo(() => new Map(guests.map((g) => [g.id, g])), [guests]);
   const noopSeatClick = () => {};
@@ -585,8 +711,15 @@ function FloorPlanPrint({
           style={{
             pageBreakAfter: i < slices.length - 1 ? "always" : undefined,
             marginBottom: i < slices.length - 1 ? 24 : 0,
+            position: "relative",
           }}
         >
+          {/* QR code in top-right corner of page 1 */}
+          {i === 0 && shareUrl && (
+            <div style={{ position: "absolute", top: 8, right: 8, zIndex: 1 }}>
+              <EmbeddedQR url={shareUrl} />
+            </div>
+          )}
           <svg
             viewBox={`${slice.vbX} ${slice.vbY} ${slice.vbW} ${slice.vbH}`}
             overflow="visible"

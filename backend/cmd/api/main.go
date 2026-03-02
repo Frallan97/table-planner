@@ -57,6 +57,9 @@ func main() {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
+	// Public routes (no auth required)
+	r.Get("/public/floor-plans/{token}", h.GetFloorPlanByShareToken)
+
 	rl := middleware.NewRateLimiter(10, 20) // 10 req/s, burst 20
 
 	r.Route("/api", func(r chi.Router) {
@@ -74,6 +77,11 @@ func main() {
 			// Share/unshare endpoints
 			r.Post("/{id}/share", h.ShareFloorPlan)
 			r.Post("/{id}/unshare", h.UnshareFloorPlan)
+
+			// Share token endpoints
+			r.Post("/{id}/share-token", h.CreateShareToken)
+			r.Delete("/{id}/share-token", h.RevokeShareToken)
+			r.Get("/{id}/share-token", h.GetShareToken)
 
 			// Presence endpoints
 			r.Post("/{id}/presence", h.SendPresenceHeartbeat)

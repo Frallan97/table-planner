@@ -183,6 +183,19 @@ export interface FloorPlanPresence {
   lastSeenAt: string;
 }
 
+export interface ShareToken {
+  token: string | null;
+}
+
+export interface PublicFloorPlan {
+  id: string;
+  name: string;
+  tables: unknown[];
+  guests: unknown[];
+  labels: unknown[];
+  organizationName?: string;
+}
+
 export interface BulkSaveResult {
   status: string;
   version?: number;
@@ -275,6 +288,32 @@ export const api = {
       throw new Error(`API error ${response.status}: ${body}`);
     }
 
+    return response.json();
+  },
+
+  // Share tokens
+  createShareToken(fpId: string): Promise<{ token: string }> {
+    return request(`/api/floor-plans/${fpId}/share-token`, {
+      method: "POST",
+    });
+  },
+
+  revokeShareToken(fpId: string): Promise<{ status: string }> {
+    return request(`/api/floor-plans/${fpId}/share-token`, {
+      method: "DELETE",
+    });
+  },
+
+  getShareToken(fpId: string): Promise<ShareToken> {
+    return request(`/api/floor-plans/${fpId}/share-token`);
+  },
+
+  async getPublicFloorPlan(token: string): Promise<PublicFloorPlan> {
+    const response = await fetch(`${API_BASE}/public/floor-plans/${token}`);
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`API error ${response.status}: ${body}`);
+    }
     return response.json();
   },
 

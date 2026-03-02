@@ -8,6 +8,7 @@ import { FloorPlanPicker } from "./components/FloorPlanPicker";
 import { ShareControl } from "./components/ShareControl";
 import { ConflictBanner } from "./components/ConflictBanner";
 import { PresenceBanner } from "./components/PresenceBanner";
+import { PublicFloorPlanView } from "./components/PublicFloorPlanView";
 import { useAuth } from "./hooks/useAuth";
 import { usePlannerFloorPlan } from "./hooks/PlannerContext";
 import { useFloorPlanPresence } from "./hooks/useFloorPlanPresence";
@@ -19,6 +20,12 @@ import { MapPin, Users, Printer, LogIn, LogOut, Loader2, ArrowLeft, Cloud, Cloud
 type Tab = "floorplan" | "guests" | "print";
 
 export function App() {
+  // Detect public share route
+  const path = typeof window !== "undefined" ? window.location.pathname : "";
+  const shareMatch = path.match(/^\/share\/(.+)$/);
+  if (shareMatch) {
+    return <PublicFloorPlanView token={shareMatch[1]} />;
+  }
   const { user, isAuthenticated, isLoading, login, logout } = useAuth();
   const { currentFloorPlanId, currentFloorPlanName, setCurrentFloorPlan, isSaving, lastSaved, hasConflict, resolveConflict } = usePlannerFloorPlan();
   const [activeTab, setActiveTab] = useState<Tab>("floorplan");
