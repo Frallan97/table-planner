@@ -44,13 +44,8 @@ func (h *Handler) BulkSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.BulkSaveRequest
-	if err := decodeJSON(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
-		return
-	}
-	if err := req.Validate(); err != nil {
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
+	req, ok := decodeAndValidate[models.BulkSaveRequest](r, w)
+	if !ok {
 		return
 	}
 
@@ -115,7 +110,7 @@ func (h *Handler) BulkSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, models.BulkSaveResponse{Status: "saved", Version: newVersion})
+	respondJSON(w, http.StatusOK, models.BulkSaveResponse{Status: "saved", Version: newVersion})
 }
 
 // upsertEntities deletes rows not in the incoming set, then upserts the rest.

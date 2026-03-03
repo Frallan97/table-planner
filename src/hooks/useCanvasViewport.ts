@@ -111,6 +111,10 @@ export function useCanvasViewport(tables: Table[], labels: FloorLabel[]) {
 
   const resetView = useCallback(() => setVb(DEFAULT_VB), []);
 
+  const focusOnPoint = useCallback((x: number, y: number, zoom = 600) => {
+    setVb({ x: x - zoom / 2, y: y - zoom / 2, w: zoom, h: zoom });
+  }, []);
+
   return {
     svgRef,
     vb,
@@ -122,5 +126,6 @@ export function useCanvasViewport(tables: Table[], labels: FloorLabel[]) {
     zoomIn,
     zoomOut,
     resetView,
+    focusOnPoint,
   };
 }

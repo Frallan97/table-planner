@@ -205,12 +205,13 @@ type ShareFloorPlanRequest struct {
 }
 
 type ShareToken struct {
-	ID          uuid.UUID `json:"id"`
-	FloorPlanID uuid.UUID `json:"floorPlanId"`
-	Token       string    `json:"token"`
-	CreatedBy   uuid.UUID `json:"createdBy"`
-	CreatedAt   time.Time `json:"createdAt"`
-	IsActive    bool      `json:"isActive"`
+	ID          uuid.UUID  `json:"id"`
+	FloorPlanID uuid.UUID  `json:"floorPlanId"`
+	Token       string     `json:"token"`
+	CreatedBy   uuid.UUID  `json:"createdBy"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	IsActive    bool       `json:"isActive"`
+	ExpiresAt   *time.Time `json:"expiresAt,omitempty"`
 }
 
 func (r *ShareFloorPlanRequest) Validate() error {

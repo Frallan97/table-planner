@@ -45,6 +45,7 @@ interface Props {
   isSelected: boolean;
   seatColorOverride?: Map<string, string>;
   showGuestNames?: boolean;
+  highlightGuestId?: string | null;
 }
 
 export function TableRenderer({
@@ -55,14 +56,16 @@ export function TableRenderer({
   isSelected,
   seatColorOverride,
   showGuestNames = true,
+  highlightGuestId,
 }: Props) {
+  const p = { table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames, highlightGuestId };
   switch (table.tableType) {
     case "LINE":
-      return <LineTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames }} />;
+      return <LineTable {...p} />;
     case "U_SHAPE":
-      return <UShapeTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames }} />;
+      return <UShapeTable {...p} />;
     case "ROUND":
-      return <RoundTable {...{ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames }} />;
+      return <RoundTable {...p} />;
     default:
       return null;
   }
@@ -70,7 +73,7 @@ export function TableRenderer({
 
 // ─── LINE TABLE ──────────────────────────────────────────────────────
 
-function LineTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames }: Props) {
+function LineTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames, highlightGuestId }: Props) {
   const endLeft = table.endSeatLeft ?? false;
   const endRight = table.endSeatRight ?? false;
   const endCount = (endLeft ? 1 : 0) + (endRight ? 1 : 0);
@@ -174,14 +177,14 @@ function LineTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, sea
       >
         {table.name}
       </text>
-      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride, showGuestNames)}
+      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride, showGuestNames, highlightGuestId)}
     </>
   );
 }
 
 // ─── U-SHAPE TABLE ───────────────────────────────────────────────────
 
-function UShapeTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames }: Props) {
+function UShapeTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames, highlightGuestId }: Props) {
   const { topSeats: nTop, leftSeats: nLeft, rightSeats: nRight } = table;
 
   const layout = useMemo(() => {
@@ -311,14 +314,14 @@ function UShapeTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, s
         </text>
       </g>
 
-      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride, showGuestNames)}
+      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride, showGuestNames, highlightGuestId)}
     </>
   );
 }
 
 // ─── ROUND TABLE ─────────────────────────────────────────────────────
 
-function RoundTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames }: Props) {
+function RoundTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, seatColorOverride, showGuestNames, highlightGuestId }: Props) {
   const n = table.seats.length;
   const R = Math.max(35, n * 7);
 
@@ -355,7 +358,7 @@ function RoundTable({ table, guestMap, selectedSeat, onSeatClick, isSelected, se
       <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fill="#555" fontSize="13" fontWeight="500">
         {table.name}
       </text>
-      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride, showGuestNames)}
+      {renderSeats(seats, table, guestMap, selectedSeat, onSeatClick, seatColorOverride, showGuestNames, highlightGuestId)}
     </>
   );
 }
@@ -369,7 +372,8 @@ function renderSeats(
   selectedSeat: { tableId: string; position: number } | null,
   onSeatClick: (tableId: string, position: number) => void,
   seatColorOverride?: Map<string, string>,
-  showGuestNames = true
+  showGuestNames = true,
+  highlightGuestId?: string | null
 ) {
   return seats.map((s) => {
     const guest = s.guestId ? guestMap.get(s.guestId) : null;
@@ -401,6 +405,17 @@ function renderSeats(
           stroke={strokeColor}
           strokeWidth={strokeW}
         />
+        {highlightGuestId && s.guestId === highlightGuestId && (
+          <circle
+            cx={s.cx}
+            cy={s.cy}
+            r={SEAT_R + 6}
+            fill="none"
+            stroke="#3b82f6"
+            strokeWidth={3}
+            className="animate-pulse-ring"
+          />
+        )}
         <text
           x={s.cx}
           y={s.cy}

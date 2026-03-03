@@ -4,6 +4,7 @@ import { loadRuntimeConfig } from "@/lib/api";
 import { TableRenderer } from "./TableRenderer";
 import type { Table, Guest, FloorLabel } from "@/lib/types";
 import { Loader2, MapPin, Users, LayoutGrid, ZoomIn, ZoomOut, Maximize } from "lucide-react";
+import { computeFloorPlanBounds } from "@/lib/utils";
 
 interface Props {
   token: string;
@@ -102,28 +103,11 @@ function PanZoomFloorPlan({
   const noopSeatClick = () => {};
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Compute bounding box
-  const PAD = 350;
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const t of tables) {
-    minX = Math.min(minX, t.position.x - PAD);
-    minY = Math.min(minY, t.position.y - PAD);
-    maxX = Math.max(maxX, t.position.x + PAD);
-    maxY = Math.max(maxY, t.position.y + PAD);
-  }
-  for (const l of labels) {
-    minX = Math.min(minX, l.position.x - l.width - 50);
-    minY = Math.min(minY, l.position.y - l.height - 50);
-    maxX = Math.max(maxX, l.position.x + l.width + 50);
-    maxY = Math.max(maxY, l.position.y + l.height + 50);
-  }
-
   if (tables.length === 0 && labels.length === 0) {
     return <p className="text-muted-foreground text-sm p-4">No floor plan elements.</p>;
   }
 
-  const fullW = maxX - minX;
-  const fullH = maxY - minY;
+  const { minX, minY, width: fullW, height: fullH } = computeFloorPlanBounds(tables, labels);
 
   // View state: what portion of the SVG coordinate space is visible
   const [viewBox, setViewBox] = useState({ x: minX, y: minY, w: fullW, h: fullH });

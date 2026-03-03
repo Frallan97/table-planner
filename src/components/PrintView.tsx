@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { usePlannerGuests as useGuests, usePlannerTables as useTables, usePlannerLabels as useLabels, usePlannerFloorPlan } from "@/hooks/PlannerContext";
 import { DietaryRestriction, DIETARY_RESTRICTION_LABELS } from "@/lib/types";
 import type { Table, Guest, FloorLabel } from "@/lib/types";
+import { computeFloorPlanBounds } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Printer, MapPin, ShieldAlert, BookA, QrCode } from "lucide-react";
 import { TableRenderer } from "./TableRenderer";
@@ -11,6 +12,12 @@ import { QRCodeSVG } from "qrcode.react";
 import { api } from "@/lib/api";
 
 type Format = "floor-plan" | "allergy-map" | "alpha-lookup" | "qr-share";
+type PageSize = "a4" | "letter";
+
+const PAGE_DIMS: Record<PageSize, { w: number; h: number; label: string }> = {
+  a4:     { w: 210, h: 297, label: "A4" },
+  letter: { w: 216, h: 279, label: "Letter" },
+};
 
 export function PrintView() {
   const { guests } = useGuests();
@@ -18,6 +25,7 @@ export function PrintView() {
   const { labels } = useLabels();
   const { currentFloorPlanId, currentFloorPlanName } = usePlannerFloorPlan();
   const [format, setFormat] = useState<Format>("floor-plan");
+  const [pageSize, setPageSize] = useState<PageSize>("a4");
   const printRef = useRef<HTMLDivElement>(null);
 
   const [lookupFontSize, setLookupFontSize] = useState(12);
@@ -40,13 +48,14 @@ export function PrintView() {
     if (!el) return;
     const win = window.open("", "_blank");
     if (!win) return;
-    const marginStyle = format === "allergy-map" ? "@page { margin: 2cm; }" : "@page { margin: 0; }";
+    const pageSizeCss = pageSize === "a4" ? "A4" : "letter";
+    const marginCss = format === "allergy-map" ? "2cm" : format === "alpha-lookup" ? "1.5cm" : "0";
     win.document.write(`<!DOCTYPE html><html><head>
       <title>Table Planner — Print</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 0; color: #111; }
-        ${marginStyle}
+        @page { size: ${pageSizeCss}; margin: ${marginCss}; }
         @media print { body { padding: 0; } }
       </style>
     </head><body>${el.innerHTML}</body></html>`);
@@ -91,6 +100,25 @@ export function PrintView() {
                 {f.label}
               </button>
             ))}
+            <div className="border-t pt-3 mt-2">
+              <Label className="text-xs">Page Size</Label>
+              <div className="flex gap-1 mt-1">
+                {(["a4", "letter"] as const).map((sz) => (
+                  <button
+                    key={sz}
+                    onClick={() => setPageSize(sz)}
+                    className={`flex-1 text-xs py-1.5 rounded border font-medium transition-colors ${
+                      pageSize === sz
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-muted/50 border-muted hover:bg-muted"
+                    }`}
+                  >
+                    {PAGE_DIMS[sz].label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {format === "floor-plan" && (
               <div className="border-t pt-3 mt-2 space-y-3">
                 <div>
@@ -191,11 +219,20 @@ export function PrintView() {
           </CardHeader>
           <CardContent className="overflow-y-auto max-h-[calc(100vh-220px)]">
             <div
+              className="mx-auto border rounded bg-gray-50"
+              style={{
+                width: "100%",
+                maxWidth: 800,
+                aspectRatio: `${PAGE_DIMS[pageSize].w} / ${PAGE_DIMS[pageSize].h}`,
+                overflow: "auto",
+              }}
+            >
+            <div
               ref={printRef}
-              className="bg-white rounded border p-6 min-h-[400px]"
+              className="bg-white min-h-full"
               style={{
                 fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                ...(format === "allergy-map" ? { padding: "2cm" } : {})
+                padding: format === "allergy-map" ? "2cm" : format === "alpha-lookup" ? "1.5cm" : "24px",
               }}
             >
               {format === "floor-plan" && (
@@ -219,6 +256,7 @@ export function PrintView() {
                   floorPlanName={currentFloorPlanName}
                 />
               )}
+            </div>
             </div>
           </CardContent>
         </Card>
@@ -387,22 +425,7 @@ function AllergyMap({ tables, guests, labels, shareUrl }: { tables: Table[]; gue
       </div>
     );
 
-  const PAD = 350;
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const t of tables) {
-    minX = Math.min(minX, t.position.x - PAD);
-    minY = Math.min(minY, t.position.y - PAD);
-    maxX = Math.max(maxX, t.position.x + PAD);
-    maxY = Math.max(maxY, t.position.y + PAD);
-  }
-  for (const l of labels) {
-    minX = Math.min(minX, l.position.x - l.width - 50);
-    minY = Math.min(minY, l.position.y - l.height - 50);
-    maxX = Math.max(maxX, l.position.x + l.width + 50);
-    maxY = Math.max(maxY, l.position.y + l.height + 50);
-  }
-  const totalW = maxX - minX;
-  const totalH = maxY - minY;
+  const { minX, minY, width: totalW, height: totalH } = computeFloorPlanBounds(tables, labels);
 
   return (
     <div>
@@ -647,23 +670,7 @@ function FloorPlanPrint({
   if (tables.length === 0 && labels.length === 0)
     return <p style={{ color: "#999" }}>No floor plan elements.</p>;
 
-  const PAD = 350;
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const t of tables) {
-    minX = Math.min(minX, t.position.x - PAD);
-    minY = Math.min(minY, t.position.y - PAD);
-    maxX = Math.max(maxX, t.position.x + PAD);
-    maxY = Math.max(maxY, t.position.y + PAD);
-  }
-  for (const l of labels) {
-    minX = Math.min(minX, l.position.x - l.width - 50);
-    minY = Math.min(minY, l.position.y - l.height - 50);
-    maxX = Math.max(maxX, l.position.x + l.width + 50);
-    maxY = Math.max(maxY, l.position.y + l.height + 50);
-  }
-
-  const totalW = maxX - minX;
-  const totalH = maxY - minY;
+  const { minX, minY, width: totalW, height: totalH } = computeFloorPlanBounds(tables, labels);
 
   const slices: { vbX: number; vbY: number; vbW: number; vbH: number; label: string }[] = [];
   if (pages === 1) {

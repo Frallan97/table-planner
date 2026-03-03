@@ -68,14 +68,8 @@ func (h *Handler) CreateOrganization(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.CreateOrganizationRequest
-	if err := decodeJSON(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
-		return
-	}
-
-	if err := req.Validate(); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	req, ok := decodeAndValidate[models.CreateOrganizationRequest](r, w)
+	if !ok {
 		return
 	}
 
@@ -195,14 +189,8 @@ func (h *Handler) UpdateOrganization(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.UpdateOrganizationRequest
-	if err := decodeJSON(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
-		return
-	}
-
-	if err := req.Validate(); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	req, ok := decodeAndValidate[models.UpdateOrganizationRequest](r, w)
+	if !ok {
 		return
 	}
 

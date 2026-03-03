@@ -185,6 +185,7 @@ export interface FloorPlanPresence {
 
 export interface ShareToken {
   token: string | null;
+  expiresAt?: string | null;
 }
 
 export interface PublicFloorPlan {
@@ -292,7 +293,7 @@ export const api = {
   },
 
   // Share tokens
-  createShareToken(fpId: string): Promise<{ token: string }> {
+  createShareToken(fpId: string): Promise<{ token: string; expiresAt?: string }> {
     return request(`/api/floor-plans/${fpId}/share-token`, {
       method: "POST",
     });

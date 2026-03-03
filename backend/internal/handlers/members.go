@@ -96,14 +96,8 @@ func (h *Handler) InviteMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.InviteMemberRequest
-	if err := decodeJSON(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
-		return
-	}
-
-	if err := req.Validate(); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	req, ok := decodeAndValidate[models.InviteMemberRequest](r, w)
+	if !ok {
 		return
 	}
 
@@ -234,14 +228,8 @@ func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.UpdateMemberRoleRequest
-	if err := decodeJSON(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
-		return
-	}
-
-	if err := req.Validate(); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	req, ok := decodeAndValidate[models.UpdateMemberRoleRequest](r, w)
+	if !ok {
 		return
 	}
 

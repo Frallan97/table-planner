@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/frallan97/table-planner-backend/internal/middleware"
 	"github.com/frallan97/table-planner-backend/internal/models"
@@ -28,14 +29,8 @@ func (h *Handler) ShareFloorPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.ShareFloorPlanRequest
-	if err := decodeJSON(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
-		return
-	}
-
-	if err := req.Validate(); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	req, ok := decodeAndValidate[models.ShareFloorPlanRequest](r, w)
+	if !ok {
 		return
 	}
 
@@ -184,9 +179,10 @@ func (h *Handler) CreateShareToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	expiresAt := time.Now().Add(30 * 24 * time.Hour)
 	_, err = tx.Exec(r.Context(),
-		`INSERT INTO floor_plan_share_tokens (floor_plan_id, token, created_by) VALUES ($1, $2, $3)`,
-		fpID, token, userID,
+		`INSERT INTO floor_plan_share_tokens (floor_plan_id, token, created_by, expires_at) VALUES ($1, $2, $3, $4)`,
+		fpID, token, userID, expiresAt,
 	)
 	if err != nil {
 		http.Error(w, `{"error":"database error"}`, http.StatusInternalServerError)
@@ -198,7 +194,7 @@ func (h *Handler) CreateShareToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]string{"token": token})
+	respondJSON(w, http.StatusOK, map[string]any{"token": token, "expiresAt": expiresAt})
 }
 
 // RevokeShareToken deactivates the active share token for a floor plan.
@@ -267,12 +263,16 @@ func (h *Handler) GetShareToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var token *string
+	var expiresAt *time.Time
 	err = h.pool.QueryRow(r.Context(),
-		`SELECT token FROM floor_plan_share_tokens WHERE floor_plan_id = $1 AND is_active = true LIMIT 1`,
+		`SELECT token, expires_at FROM floor_plan_share_tokens
+		 WHERE floor_plan_id = $1 AND is_active = true
+		   AND (expires_at IS NULL OR expires_at > NOW())
+		 LIMIT 1`,
 		fpID,
-	).Scan(&token)
+	).Scan(&token, &expiresAt)
 	if err == pgx.ErrNoRows || token == nil {
-		respondJSON(w, http.StatusOK, map[string]*string{"token": nil})
+		respondJSON(w, http.StatusOK, map[string]any{"token": nil})
 		return
 	}
 	if err != nil {
@@ -280,7 +280,7 @@ func (h *Handler) GetShareToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]*string{"token": token})
+	respondJSON(w, http.StatusOK, map[string]any{"token": token, "expiresAt": expiresAt})
 }
 
 // GetFloorPlanByShareToken returns a floor plan by its public share token (no auth required).
@@ -291,10 +291,12 @@ func (h *Handler) GetFloorPlanByShareToken(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Look up active token
+	// Look up active, non-expired token
 	var fpID uuid.UUID
 	err := h.pool.QueryRow(r.Context(),
-		`SELECT floor_plan_id FROM floor_plan_share_tokens WHERE token = $1 AND is_active = true`,
+		`SELECT floor_plan_id FROM floor_plan_share_tokens
+		 WHERE token = $1 AND is_active = true
+		   AND (expires_at IS NULL OR expires_at > NOW())`,
 		token,
 	).Scan(&fpID)
 	if err != nil {

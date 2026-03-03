@@ -41,3 +41,26 @@ func respondJSON(w http.ResponseWriter, status int, data any) {
 		json.NewEncoder(w).Encode(data)
 	}
 }
+
+// Validatable is implemented by request types that can self-validate.
+type Validatable interface {
+	Validate() error
+}
+
+// decodeAndValidate decodes JSON from the request body into *T and validates it.
+// T is the struct type; *T must implement Validatable (pointer receiver).
+func decodeAndValidate[T any, PT interface {
+	*T
+	Validatable
+}](r *http.Request, w http.ResponseWriter) (PT, bool) {
+	req := PT(new(T))
+	if err := decodeJSON(r, req); err != nil {
+		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
+		return nil, false
+	}
+	if err := req.Validate(); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return nil, false
+	}
+	return req, true
+}

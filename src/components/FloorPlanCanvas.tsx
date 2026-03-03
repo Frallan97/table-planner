@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo } from "react";
+import { useRef, useState, useMemo, useEffect } from "react";
 import type { Table, Guest, FloorLabel, SelectedItem } from "@/lib/types";
 import { TableRenderer } from "./TableRenderer";
 import { useCanvasViewport } from "@/hooks/useCanvasViewport";
@@ -21,6 +21,8 @@ interface Props {
   onPasteSelected?: () => void;
   readOnly?: boolean;
   showGuestNames?: boolean;
+  highlightGuestId?: string | null;
+  onFocusOnPoint?: (fn: (x: number, y: number, zoom?: number) => void) => void;
 }
 
 export function FloorPlanCanvas({
@@ -39,6 +41,8 @@ export function FloorPlanCanvas({
   onPasteSelected,
   readOnly = false,
   showGuestNames = true,
+  highlightGuestId,
+  onFocusOnPoint,
 }: Props) {
   const {
     svgRef,
@@ -52,6 +56,10 @@ export function FloorPlanCanvas({
     zoomOut,
     resetView,
   } = useCanvasViewport(tables, labels);
+
+  useEffect(() => {
+    if (onFocusOnPoint) onFocusOnPoint(focusOnPoint);
+  }, [onFocusOnPoint, focusOnPoint]);
 
   const dragHandlers = useMemo(
     () => ({ onTableMove, onTablesMoveMulti, onLabelMove, onItemSelect }),
@@ -161,6 +169,15 @@ export function FloorPlanCanvas({
           <pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse">
             <circle cx="20" cy="20" r="0.8" fill="#ddd" />
           </pattern>
+          <style>{`
+            .animate-pulse-ring {
+              animation: pulse-ring 1.2s ease-in-out infinite;
+            }
+            @keyframes pulse-ring {
+              0%, 100% { opacity: 1; stroke-width: 3; }
+              50% { opacity: 0.3; stroke-width: 1; }
+            }
+          `}</style>
         </defs>
         <rect
           x={vb.x - 200}
@@ -242,6 +259,7 @@ export function FloorPlanCanvas({
                 onSeatClick={onSeatClick}
                 isSelected={selectedTableIds.includes(table.id)}
                 showGuestNames={showGuestNames}
+                highlightGuestId={highlightGuestId}
               />
             </g>
           );

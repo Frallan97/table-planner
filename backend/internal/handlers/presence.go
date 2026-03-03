@@ -59,7 +59,7 @@ func (h *Handler) SendPresenceHeartbeat(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	writeJSON(w, http.StatusOK, others)
+	respondJSON(w, http.StatusOK, others)
 }
 
 // GetPresence returns the list of other active editors (read-only, no upsert).
@@ -92,7 +92,7 @@ func (h *Handler) GetPresence(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, others)
+	respondJSON(w, http.StatusOK, others)
 }
 
 // getActivePresence returns presence rows active within the last 2 minutes, excluding excludeUserID.

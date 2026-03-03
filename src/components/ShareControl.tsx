@@ -24,6 +24,7 @@ export function ShareControl({
   const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
   const [shareToken, setShareToken] = useState<string | null>(null);
+  const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
   const [tokenLoading, setTokenLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -38,6 +39,7 @@ export function ShareControl({
     try {
       const res = await api.getShareToken(floorPlanId);
       setShareToken(res.token);
+      setTokenExpiresAt(res.expiresAt ?? null);
     } catch {
       // ignore
     }
@@ -48,6 +50,7 @@ export function ShareControl({
     try {
       const res = await api.createShareToken(floorPlanId);
       setShareToken(res.token);
+      setTokenExpiresAt(res.expiresAt ?? null);
     } catch (err) {
       console.error("Failed to create share token:", err);
     } finally {
@@ -61,6 +64,7 @@ export function ShareControl({
     try {
       await api.revokeShareToken(floorPlanId);
       setShareToken(null);
+      setTokenExpiresAt(null);
     } catch (err) {
       console.error("Failed to revoke share token:", err);
     } finally {
@@ -229,6 +233,11 @@ export function ShareControl({
                 <div className="flex justify-center py-1">
                   <QRCodeSVG value={shareUrl} size={100} level="M" />
                 </div>
+                {tokenExpiresAt && (
+                  <p className="text-[10px] text-muted-foreground text-center">
+                    Expires {new Date(tokenExpiresAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                  </p>
+                )}
                 <button
                   onClick={handleRevokeToken}
                   disabled={tokenLoading}

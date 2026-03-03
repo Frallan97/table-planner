@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,7 +11,7 @@ import {
 import { usePlannerGuests as useGuests, usePlannerTables as useTables, usePlannerLabels as useLabels } from "@/hooks/PlannerContext";
 import { FloorPlanCanvas } from "./FloorPlanCanvas";
 import type { SelectedItem } from "@/lib/types";
-import { LayoutGrid, UserPlus, UserMinus, X, Eye, EyeOff } from "lucide-react";
+import { LayoutGrid, UserPlus, UserMinus, X, Eye, EyeOff, Search } from "lucide-react";
 
 interface Props {
   selectedItem: SelectedItem;
@@ -32,6 +32,39 @@ export function TableCanvas({ selectedItem, onSelectItem }: Props) {
   } | null>(null);
   const [guestToAssign, setGuestToAssign] = useState("");
   const [showGuestNames, setShowGuestNames] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [highlightGuestId, setHighlightGuestId] = useState<string | null>(null);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const focusOnPointRef = useRef<((x: number, y: number, zoom?: number) => void) | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return guests.filter((g) => g.name.toLowerCase().includes(q)).slice(0, 8);
+  }, [searchQuery, guests]);
+
+  const handleSelectSearchResult = useCallback((guestId: string) => {
+    const guest = guests.find((g) => g.id === guestId);
+    if (!guest?.assignedTableId) return;
+    const table = tables.find((t) => t.id === guest.assignedTableId);
+    if (!table) return;
+
+    if (focusOnPointRef.current) {
+      focusOnPointRef.current(table.position.x, table.position.y);
+    }
+    setHighlightGuestId(guestId);
+    setSearchQuery("");
+    setShowSearchDropdown(false);
+
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightGuestId(null), 3000);
+  }, [guests, tables]);
+
+  const handleFocusOnPoint = useCallback((fn: (x: number, y: number, zoom?: number) => void) => {
+    focusOnPointRef.current = fn;
+  }, []);
 
   const assignedCount = guests.filter(
     (g) => g.assignedTableId !== null
@@ -150,6 +183,54 @@ export function TableCanvas({ selectedItem, onSelectItem }: Props) {
             Floor Plan
           </CardTitle>
           <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="flex items-center gap-1 h-7 border rounded px-2 bg-muted/30">
+                <Search className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setShowSearchDropdown(true);
+                  }}
+                  onFocus={() => setShowSearchDropdown(true)}
+                  placeholder="Find guest..."
+                  className="bg-transparent text-xs outline-none w-24 placeholder:text-muted-foreground"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => { setSearchQuery(""); setShowSearchDropdown(false); }}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              {showSearchDropdown && searchResults.length > 0 && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowSearchDropdown(false)} />
+                  <div className="absolute top-full left-0 mt-1 w-56 bg-background border rounded-lg shadow-lg z-50 py-1 max-h-60 overflow-y-auto">
+                    {searchResults.map((g) => {
+                      const table = g.assignedTableId ? tables.find((t) => t.id === g.assignedTableId) : null;
+                      return (
+                        <button
+                          key={g.id}
+                          onClick={() => handleSelectSearchResult(g.id)}
+                          disabled={!g.assignedTableId}
+                          className="w-full flex items-center justify-between px-3 py-1.5 text-xs hover:bg-muted transition-colors disabled:opacity-50 text-left"
+                        >
+                          <span className="font-medium truncate">{g.name}</span>
+                          <span className="text-muted-foreground ml-2 flex-shrink-0">
+                            {table ? table.name : "unassigned"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -197,6 +278,8 @@ export function TableCanvas({ selectedItem, onSelectItem }: Props) {
             onCopySelected={handleCopySelected}
             onPasteSelected={handlePasteSelected}
             showGuestNames={showGuestNames}
+            highlightGuestId={highlightGuestId}
+            onFocusOnPoint={handleFocusOnPoint}
           />
         </div>
 

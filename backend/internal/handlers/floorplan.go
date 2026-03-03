@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -51,7 +50,7 @@ func (h *Handler) ListFloorPlans(w http.ResponseWriter, r *http.Request) {
 		plans = append(plans, fp)
 	}
 
-	writeJSON(w, http.StatusOK, plans)
+	respondJSON(w, http.StatusOK, plans)
 }
 
 func (h *Handler) CreateFloorPlan(w http.ResponseWriter, r *http.Request) {
@@ -61,13 +60,8 @@ func (h *Handler) CreateFloorPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.CreateFloorPlanRequest
-	if err := decodeJSON(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
-		return
-	}
-	if err := req.Validate(); err != nil {
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
+	req, ok := decodeAndValidate[models.CreateFloorPlanRequest](r, w)
+	if !ok {
 		return
 	}
 
@@ -92,7 +86,7 @@ func (h *Handler) CreateFloorPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, fp)
+	respondJSON(w, http.StatusCreated, fp)
 }
 
 func (h *Handler) GetFloorPlan(w http.ResponseWriter, r *http.Request) {
@@ -167,7 +161,7 @@ func (h *Handler) GetFloorPlan(w http.ResponseWriter, r *http.Request) {
 		OrganizationName: orgName,
 	}
 
-	writeJSON(w, http.StatusOK, result)
+	respondJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) UpdateFloorPlan(w http.ResponseWriter, r *http.Request) {
@@ -183,13 +177,8 @@ func (h *Handler) UpdateFloorPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.UpdateFloorPlanRequest
-	if err := decodeJSON(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
-		return
-	}
-	if err := req.Validate(); err != nil {
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
+	req, ok := decodeAndValidate[models.UpdateFloorPlanRequest](r, w)
+	if !ok {
 		return
 	}
 
@@ -213,7 +202,7 @@ func (h *Handler) UpdateFloorPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+	respondJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
 func (h *Handler) DeleteFloorPlan(w http.ResponseWriter, r *http.Request) {
@@ -255,7 +244,7 @@ func (h *Handler) DeleteFloorPlan(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"floor plan not found"}`, http.StatusNotFound)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+		respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 		return
 	}
 
@@ -287,12 +276,7 @@ func (h *Handler) DeleteFloorPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "unshared"})
+	respondJSON(w, http.StatusOK, map[string]string{"status": "unshared"})
 }
 
-func writeJSON(w http.ResponseWriter, status int, v interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
-}
 
